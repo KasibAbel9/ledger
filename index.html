@@ -83,6 +83,14 @@ h1,h2,h3{font-family:'Manrope',system-ui,sans-serif;}
 .welcome-banner h4{margin:0 0 4px;font-size:16px;font-weight:800;letter-spacing:-0.3px;}
 .welcome-banner p{margin:0;font-size:12.5px;color:var(--hero-sub);line-height:1.5;}
 .welcome-banner .wb-close{position:absolute;top:10px;right:12px;background:none;border:none;color:var(--hero-sub);font-size:18px;line-height:1;padding:2px;}
+.undo-toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%) translateY(20px);z-index:60;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:99px;padding:10px 10px 10px 18px;display:flex;align-items:center;gap:14px;box-shadow:0 6px 20px rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .25s ease,transform .25s ease;font-size:13.5px;font-weight:600;max-width:calc(100% - 40px);}
+.undo-toast.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto;}
+.undo-toast button{background:var(--accent);color:var(--accent-ink);border:none;border-radius:99px;padding:7px 16px;font-size:13px;font-weight:700;flex-shrink:0;}
+.install-banner{margin-top:20px;}
+.install-btn{width:100%;background:var(--accent);color:var(--accent-ink);border:none;border-radius:var(--radius-sm);padding:14px;font-size:13px;font-weight:800;letter-spacing:0.4px;text-transform:uppercase;line-height:1.3;}
+.install-btn:active{transform:scale(0.98);}
+.install-ios{margin-top:12px;font-size:12.5px;color:var(--text-dim);line-height:1.6;text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;}
+.install-ios strong{color:var(--text);}
 
 /* App */
 #app{display:none;padding-bottom:110px;}
@@ -234,14 +242,21 @@ body[data-theme="day"] .hero-decor .sun{display:block;}
     <svg id="authThemeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>
   </button>
   <div class="logo">Ledger</div>
-   <div class="tagline" id="authTagline">Your personal expense tracker</div>
-  <div style="font-size:11.5px;color:var(--text-faint);margin:-32px 0 40px;">☀️ Tap the sun/moon in the corner to switch day &amp; night</div>
+  <div class="tagline" id="authTagline">Your personal expense tracker</div>
 
   <!-- Landing: three choices -->
   <div class="auth-form" id="landingWrap">
     <button class="btn-primary" id="goLoginBtn" style="margin-bottom:12px;">Log in</button>
     <button class="btn-primary" id="goSignupBtn" style="margin-bottom:12px;background:var(--sage);color:#0F1D16;">Sign up</button>
     <button class="btn-secondary" id="goGuestBtn" style="width:100%;">Quick / Guest login</button>
+
+    <div id="installBanner" class="install-banner" style="display:none;">
+      <button id="installBtn" class="install-btn">INSTALL FOR A BETTER UI EXPERIENCE</button>
+      <div id="installIosSteps" class="install-ios" style="display:none;">
+        Tap the <strong>Share</strong> button <span aria-hidden="true">⎋</span> in your browser bar, then choose <strong>“Add to Home Screen”</strong>.
+      </div>
+    </div>
+
     <p style="font-size:12px;color:var(--text-faint);margin-top:22px;text-align:center;line-height:1.5;">
       Your data is private — only you can see your entries. No email needed for a quick account.
     </p>
@@ -413,6 +428,7 @@ body[data-theme="day"] .hero-decor .sun{display:block;}
       <button class="btn-secondary" id="txCancel">Cancel</button>
       <button class="btn-primary" id="txSave">Save</button>
     </div>
+    <button class="btn-secondary" id="txSaveAnother" style="width:100%;margin-top:10px;">Save &amp; add another</button>
     <button class="btn-danger" id="txDelete" style="display:none;">Delete entry</button>
   </div>
 </div>
@@ -485,6 +501,8 @@ body[data-theme="day"] .hero-decor .sun{display:block;}
   </div>
 </div>
 
+<div id="undoToast" class="undo-toast"><span id="undoToastMsg">Entry deleted</span><button id="undoToastBtn">Undo</button></div>
+
 <div id="printArea"></div>
 
 <script>
@@ -524,6 +542,9 @@ var saveTimer = null;
 var lastSyncTime = null;
 var currentTheme = "night";
 var isNewUserWelcome = false;
+var lastUsed = { type:"expense", category:null, date:null };
+var undoTimer = null;
+var pendingUndo = null;
 
 function fmt(n){
   var cur = (state.currency && CURRENCIES[state.currency]) ? state.currency : "EUR";
@@ -570,6 +591,56 @@ function initTheme(){
 }
 document.getElementById("themeToggle").addEventListener("click",toggleTheme);
 document.getElementById("authThemeToggle").addEventListener("click",toggleTheme);
+
+// ---- PWA install banner ----
+var deferredInstallPrompt = null;
+function isStandalone(){
+  return (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone===true;
+}
+function isIOS(){
+  return /iphone|ipad|ipod/i.test(window.navigator.userAgent) && !window.MSStream;
+}
+// Android/Chrome fires this when the app is installable — capture it for our button
+window.addEventListener("beforeinstallprompt", function(e){
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  refreshInstallBanner();
+});
+window.addEventListener("appinstalled", function(){
+  deferredInstallPrompt = null;
+  var b=document.getElementById("installBanner"); if(b) b.style.display="none";
+});
+function refreshInstallBanner(){
+  var banner=document.getElementById("installBanner");
+  if(!banner) return;
+  // Already installed / running as app → never show
+  if(isStandalone()){ banner.style.display="none"; return; }
+  if(isIOS()){
+    // iOS can't auto-prompt: show the button, and reveal Share-menu steps on tap
+    banner.style.display="block";
+    document.getElementById("installBtn").style.display="block";
+  } else if(deferredInstallPrompt){
+    // Android/Chrome: real install prompt available
+    banner.style.display="block";
+    document.getElementById("installBtn").style.display="block";
+    document.getElementById("installIosSteps").style.display="none";
+  } else {
+    // Desktop or unsupported browser: hide (nothing useful to offer)
+    banner.style.display="none";
+  }
+}
+var installBtnEl=document.getElementById("installBtn");
+if(installBtnEl){
+  installBtnEl.addEventListener("click", function(){
+    if(deferredInstallPrompt){
+      deferredInstallPrompt.prompt();
+      deferredInstallPrompt.userChoice.then(function(){ deferredInstallPrompt=null; });
+    } else if(isIOS()){
+      // reveal the manual Share-menu instructions
+      document.getElementById("installIosSteps").style.display="block";
+    }
+  });
+}
 
 // ---- Supabase helpers ----
 function sbFetch(path, method, body, token, extraHeaders){
@@ -762,6 +833,7 @@ function showAuth(){
   document.getElementById("app").style.display="none";
   document.getElementById("authScreen").style.display="flex";
   showAuthPanel("landingWrap");
+  refreshInstallBanner();
 }
 function showApp(mode){
   document.getElementById("loadingScreen").style.display="none";
@@ -1176,14 +1248,21 @@ function openTxSheet(tx){
   editingId=tx?tx.id:null;
   document.getElementById("txSheetTitle").textContent=tx?"Edit entry":"Add entry";
   document.getElementById("txDelete").style.display=tx?"block":"none";
+  document.getElementById("txSaveAnother").style.display=tx?"none":"block";
   document.getElementById("txAmountErr").classList.remove("show");
   document.getElementById("newCatField").style.display="none";
-  currentType=tx?tx.type:"expense";
+  // For new entries, start from the last-used type so repeat logging is quick
+  currentType = tx ? tx.type : (lastUsed.type||"expense");
   setTypeButtons(currentType);
-  populateCategorySelect(tx?tx.category:activeCatList()[0]);
+  // Pick category: editing -> its own; new -> last-used if still valid, else first
+  var startCat;
+  if(tx){ startCat=tx.category; }
+  else if(lastUsed.category && activeCatList().indexOf(lastUsed.category)>-1){ startCat=lastUsed.category; }
+  else { startCat=activeCatList()[0]; }
+  populateCategorySelect(startCat);
   document.getElementById("txAmount").value=tx?tx.amount:"";
   document.getElementById("txDesc").value=tx?(tx.description||""):"";
-  document.getElementById("txDate").value=tx?tx.date:todayISO();
+  document.getElementById("txDate").value=tx?tx.date:(lastUsed.date||todayISO());
   txOverlay.classList.add("open");
   setTimeout(function(){ document.getElementById("txAmount").focus(); },300);
 }
@@ -1214,10 +1293,10 @@ document.getElementById("newCatAdd").addEventListener("click",function(){
 document.getElementById("fab").addEventListener("click",function(){ openTxSheet(null); });
 document.getElementById("txCancel").addEventListener("click",closeTxSheet);
 txOverlay.addEventListener("click",function(e){ if(e.target===txOverlay) closeTxSheet(); });
-document.getElementById("txSave").addEventListener("click",function(){
+function commitTx(){
   var amountRaw=document.getElementById("txAmount").value;
   var amount=parseFloat(amountRaw);
-  if(!amountRaw||isNaN(amount)||amount<=0){ document.getElementById("txAmountErr").classList.add("show"); return; }
+  if(!amountRaw||isNaN(amount)||amount<=0){ document.getElementById("txAmountErr").classList.add("show"); return false; }
   document.getElementById("txAmountErr").classList.remove("show");
   var catVal=document.getElementById("txCategory").value;
   var category=catVal==="__new__"?activeCatList()[0]:catVal;
@@ -1229,16 +1308,53 @@ document.getElementById("txSave").addEventListener("click",function(){
   } else {
     state.transactions.push({id:uid(),type:currentType,amount:amount,category:category,description:desc,date:date,_order:Date.now()});
   }
+  // remember choices to speed up the next entry
+  lastUsed.type=currentType; lastUsed.category=category; lastUsed.date=date;
   doSave();
-  closeTxSheet();
   render();
+  return true;
+}
+document.getElementById("txSave").addEventListener("click",function(){
+  if(commitTx()) closeTxSheet();
+});
+document.getElementById("txSaveAnother").addEventListener("click",function(){
+  if(!commitTx()) return;
+  // keep the sheet open, reset for a fresh entry using the just-used defaults
+  editingId=null;
+  document.getElementById("txAmount").value="";
+  document.getElementById("txDesc").value="";
+  document.getElementById("txAmount").focus();
+  // brief confirmation flash on the button
+  var b=document.getElementById("txSaveAnother"); var old=b.textContent;
+  b.textContent="Added ✓"; setTimeout(function(){ b.textContent=old; },900);
 });
 document.getElementById("txDelete").addEventListener("click",function(){
-  var id=editingId; closeTxSheet();
-  showConfirm("Delete this entry?","This can't be undone.",function(){
-    state.transactions=state.transactions.filter(function(t){ return t.id!==id; });
+  var id=editingId;
+  var t=state.transactions.find(function(x){ return x.id===id; });
+  if(!t){ closeTxSheet(); return; }
+  var removed={id:t.id,type:t.type,amount:t.amount,category:t.category,description:t.description,date:t.date,_order:t._order};
+  closeTxSheet();
+  // optimistic delete + undo window (no blocking confirm dialog)
+  state.transactions=state.transactions.filter(function(x){ return x.id!==id; });
+  doSave(); render();
+  showUndo("Entry deleted", removed);
+});
+function showUndo(msg, removedTx){
+  var toast=document.getElementById("undoToast");
+  document.getElementById("undoToastMsg").textContent=msg;
+  pendingUndo=removedTx;
+  toast.classList.add("show");
+  clearTimeout(undoTimer);
+  undoTimer=setTimeout(function(){ toast.classList.remove("show"); pendingUndo=null; },5000);
+}
+document.getElementById("undoToastBtn").addEventListener("click",function(){
+  if(pendingUndo){
+    state.transactions.push(pendingUndo);
+    pendingUndo=null;
     doSave(); render();
-  });
+  }
+  clearTimeout(undoTimer);
+  document.getElementById("undoToast").classList.remove("show");
 });
 
 // ---- Settings ----
