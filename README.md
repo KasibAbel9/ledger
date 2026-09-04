@@ -161,4 +161,4 @@ Quick/guest accounts (username + PIN, no email) are just as isolated by RLS as e
 
 ## Credits
 
-Built by [Kasib Ahmed](https://github.com/KasibAbel9) with a friend, as a personal project. Not affiliated with any company; shared for friends and anyone who finds it useful.
+Built by [Kasib Ahmed](https://github.com/KasibAbel9), as a personal project. Not affiliated with any company; shared for friends and anyone who finds it useful.
