@@ -83,9 +83,6 @@ h1,h2,h3{font-family:'Manrope',system-ui,sans-serif;}
 .welcome-banner h4{margin:0 0 4px;font-size:16px;font-weight:800;letter-spacing:-0.3px;}
 .welcome-banner p{margin:0;font-size:12.5px;color:var(--hero-sub);line-height:1.5;}
 .welcome-banner .wb-close{position:absolute;top:10px;right:12px;background:none;border:none;color:var(--hero-sub);font-size:18px;line-height:1;padding:2px;}
-.undo-toast{position:fixed;left:50%;bottom:96px;transform:translateX(-50%) translateY(20px);z-index:60;background:var(--surface-2);color:var(--text);border:1px solid var(--border);border-radius:99px;padding:10px 10px 10px 18px;display:flex;align-items:center;gap:14px;box-shadow:0 6px 20px rgba(0,0,0,.35);opacity:0;pointer-events:none;transition:opacity .25s ease,transform .25s ease;font-size:13.5px;font-weight:600;max-width:calc(100% - 40px);}
-.undo-toast.show{opacity:1;transform:translateX(-50%) translateY(0);pointer-events:auto;}
-.undo-toast button{background:var(--accent);color:var(--accent-ink);border:none;border-radius:99px;padding:7px 16px;font-size:13px;font-weight:700;flex-shrink:0;}
 
 /* App */
 #app{display:none;padding-bottom:110px;}
@@ -415,7 +412,6 @@ body[data-theme="day"] .hero-decor .sun{display:block;}
       <button class="btn-secondary" id="txCancel">Cancel</button>
       <button class="btn-primary" id="txSave">Save</button>
     </div>
-    <button class="btn-secondary" id="txSaveAnother" style="width:100%;margin-top:10px;">Save &amp; add another</button>
     <button class="btn-danger" id="txDelete" style="display:none;">Delete entry</button>
   </div>
 </div>
@@ -488,8 +484,6 @@ body[data-theme="day"] .hero-decor .sun{display:block;}
   </div>
 </div>
 
-<div id="undoToast" class="undo-toast"><span id="undoToastMsg">Entry deleted</span><button id="undoToastBtn">Undo</button></div>
-
 <div id="printArea"></div>
 
 <script>
@@ -529,9 +523,6 @@ var saveTimer = null;
 var lastSyncTime = null;
 var currentTheme = "night";
 var isNewUserWelcome = false;
-var lastUsed = { type:"expense", category:null, date:null };
-var undoTimer = null;
-var pendingUndo = null;
 
 function fmt(n){
   var cur = (state.currency && CURRENCIES[state.currency]) ? state.currency : "EUR";
@@ -1184,21 +1175,14 @@ function openTxSheet(tx){
   editingId=tx?tx.id:null;
   document.getElementById("txSheetTitle").textContent=tx?"Edit entry":"Add entry";
   document.getElementById("txDelete").style.display=tx?"block":"none";
-  document.getElementById("txSaveAnother").style.display=tx?"none":"block";
   document.getElementById("txAmountErr").classList.remove("show");
   document.getElementById("newCatField").style.display="none";
-  // For new entries, start from the last-used type so repeat logging is quick
-  currentType = tx ? tx.type : (lastUsed.type||"expense");
+  currentType=tx?tx.type:"expense";
   setTypeButtons(currentType);
-  // Pick category: editing -> its own; new -> last-used if still valid, else first
-  var startCat;
-  if(tx){ startCat=tx.category; }
-  else if(lastUsed.category && activeCatList().indexOf(lastUsed.category)>-1){ startCat=lastUsed.category; }
-  else { startCat=activeCatList()[0]; }
-  populateCategorySelect(startCat);
+  populateCategorySelect(tx?tx.category:activeCatList()[0]);
   document.getElementById("txAmount").value=tx?tx.amount:"";
   document.getElementById("txDesc").value=tx?(tx.description||""):"";
-  document.getElementById("txDate").value=tx?tx.date:(lastUsed.date||todayISO());
+  document.getElementById("txDate").value=tx?tx.date:todayISO();
   txOverlay.classList.add("open");
   setTimeout(function(){ document.getElementById("txAmount").focus(); },300);
 }
@@ -1229,10 +1213,10 @@ document.getElementById("newCatAdd").addEventListener("click",function(){
 document.getElementById("fab").addEventListener("click",function(){ openTxSheet(null); });
 document.getElementById("txCancel").addEventListener("click",closeTxSheet);
 txOverlay.addEventListener("click",function(e){ if(e.target===txOverlay) closeTxSheet(); });
-function commitTx(){
+document.getElementById("txSave").addEventListener("click",function(){
   var amountRaw=document.getElementById("txAmount").value;
   var amount=parseFloat(amountRaw);
-  if(!amountRaw||isNaN(amount)||amount<=0){ document.getElementById("txAmountErr").classList.add("show"); return false; }
+  if(!amountRaw||isNaN(amount)||amount<=0){ document.getElementById("txAmountErr").classList.add("show"); return; }
   document.getElementById("txAmountErr").classList.remove("show");
   var catVal=document.getElementById("txCategory").value;
   var category=catVal==="__new__"?activeCatList()[0]:catVal;
@@ -1244,53 +1228,16 @@ function commitTx(){
   } else {
     state.transactions.push({id:uid(),type:currentType,amount:amount,category:category,description:desc,date:date,_order:Date.now()});
   }
-  // remember choices to speed up the next entry
-  lastUsed.type=currentType; lastUsed.category=category; lastUsed.date=date;
   doSave();
+  closeTxSheet();
   render();
-  return true;
-}
-document.getElementById("txSave").addEventListener("click",function(){
-  if(commitTx()) closeTxSheet();
-});
-document.getElementById("txSaveAnother").addEventListener("click",function(){
-  if(!commitTx()) return;
-  // keep the sheet open, reset for a fresh entry using the just-used defaults
-  editingId=null;
-  document.getElementById("txAmount").value="";
-  document.getElementById("txDesc").value="";
-  document.getElementById("txAmount").focus();
-  // brief confirmation flash on the button
-  var b=document.getElementById("txSaveAnother"); var old=b.textContent;
-  b.textContent="Added ✓"; setTimeout(function(){ b.textContent=old; },900);
 });
 document.getElementById("txDelete").addEventListener("click",function(){
-  var id=editingId;
-  var t=state.transactions.find(function(x){ return x.id===id; });
-  if(!t){ closeTxSheet(); return; }
-  var removed={id:t.id,type:t.type,amount:t.amount,category:t.category,description:t.description,date:t.date,_order:t._order};
-  closeTxSheet();
-  // optimistic delete + undo window (no blocking confirm dialog)
-  state.transactions=state.transactions.filter(function(x){ return x.id!==id; });
-  doSave(); render();
-  showUndo("Entry deleted", removed);
-});
-function showUndo(msg, removedTx){
-  var toast=document.getElementById("undoToast");
-  document.getElementById("undoToastMsg").textContent=msg;
-  pendingUndo=removedTx;
-  toast.classList.add("show");
-  clearTimeout(undoTimer);
-  undoTimer=setTimeout(function(){ toast.classList.remove("show"); pendingUndo=null; },5000);
-}
-document.getElementById("undoToastBtn").addEventListener("click",function(){
-  if(pendingUndo){
-    state.transactions.push(pendingUndo);
-    pendingUndo=null;
+  var id=editingId; closeTxSheet();
+  showConfirm("Delete this entry?","This can't be undone.",function(){
+    state.transactions=state.transactions.filter(function(t){ return t.id!==id; });
     doSave(); render();
-  }
-  clearTimeout(undoTimer);
-  document.getElementById("undoToast").classList.remove("show");
+  });
 });
 
 // ---- Settings ----
