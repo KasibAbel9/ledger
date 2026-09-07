@@ -131,6 +131,9 @@ body[data-theme="day"] .hero-decor .sun{display:block;}
 .balance-row .label{font-size:12.5px;color:var(--hero-sub);}
 .balance-row .amount{font-size:16px;font-weight:700;font-variant-numeric:tabular-nums;}
 .balance-row .amount.neg{color:#F0A099;}
+body[data-theme="day"] .balance-row .amount{color:#000000;font-weight:800;}
+body[data-theme="day"] .balance-row .amount.neg{color:#000000;font-weight:800;}
+body[data-theme="day"] .balance-row .label{color:#3A2A1E;}
 
 .nudge{margin:0 20px 20px;padding:12px 14px;border-radius:var(--radius-md);background:var(--surface);border:1px solid var(--border);display:flex;align-items:center;gap:10px;}
 .nudge svg{width:18px;height:18px;flex-shrink:0;color:var(--accent);}
@@ -380,7 +383,7 @@ body[data-theme="day"] .hero-decor .sun{display:block;}
       <div class="hero-amount" id="heroAmount">€0</div>
       <div class="budget-block" id="budgetBlock"></div>
       <div class="balance-row">
-        <span class="label">Balance</span>
+        <span class="label" id="balanceLabel">Left this month</span>
         <span class="amount" id="balanceAmount">€0</span>
       </div>
     </div>
@@ -1124,10 +1127,21 @@ function render(){
   var totals=monthTotals(mk);
   document.getElementById("heroAmount").textContent=fmt(totals.expense);
   renderBudgetBlock(totals.expense);
-  var bal=allTimeBalance();
   var balEl=document.getElementById("balanceAmount");
-  balEl.textContent=fmt(bal);
-  balEl.classList.toggle("neg",bal<0);
+  var balLabel=document.getElementById("balanceLabel");
+  if(state.budget>0){
+    // "Left this month" = budget minus what was spent this month
+    var left=state.budget-totals.expense;
+    balLabel.textContent="Left this month";
+    balEl.textContent=fmt(left);
+    balEl.classList.toggle("neg",left<0); // red when overspent
+  } else {
+    // No budget set → fall back to net (income − expenses) all-time
+    var bal=allTimeBalance();
+    balLabel.textContent="Balance";
+    balEl.textContent=fmt(bal);
+    balEl.classList.toggle("neg",bal<0);
+  }
   renderNudge();
   renderDonut(mk,totals);
   renderCategoryList(mk,totals);
