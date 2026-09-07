@@ -91,6 +91,15 @@ h1,h2,h3{font-family:'Manrope',system-ui,sans-serif;}
 .install-btn:active{transform:scale(0.98);}
 .install-ios{margin-top:12px;font-size:12.5px;color:var(--text-dim);line-height:1.6;text-align:center;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;}
 .install-ios strong{color:var(--text);}
+.install-bar{margin:0 20px 18px;display:none;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:14px 16px;}
+.install-bar-row{display:flex;align-items:center;gap:12px;}
+.install-bar-txt{flex:1;min-width:0;}
+.install-bar-title{font-size:13.5px;font-weight:700;color:var(--text);line-height:1.3;}
+.install-bar-sub{font-size:11.5px;color:var(--text-dim);margin-top:2px;line-height:1.4;}
+.install-bar-btn{flex-shrink:0;background:var(--accent);color:var(--accent-ink);border:none;border-radius:var(--radius-sm);padding:10px 14px;font-size:12px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;}
+.install-bar-btn:active{transform:scale(.97);}
+.install-bar-steps{display:none;margin-top:12px;font-size:12.5px;color:var(--text-dim);line-height:1.6;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;}
+.install-bar-steps strong{color:var(--text);}
 
 /* App */
 #app{display:none;padding-bottom:110px;}
@@ -476,6 +485,17 @@ body[data-theme="day"] .balance-row .label{color:#3A2A1E;}
   <div id="welcomeSlot"></div>
   <div id="whatsNewSlot"></div>
   <div id="nudgeSlot"></div>
+  <div class="install-bar" id="installBarApp">
+    <div class="install-bar-row">
+      <div class="install-bar-txt">
+        <div class="install-bar-title">Install Ledger</div>
+        <div class="install-bar-sub" id="installBarSub">Get the full-screen app experience.</div>
+      </div>
+      <button class="install-bar-btn" id="installBarBtn">Install</button>
+    </div>
+    <div class="install-bar-steps" id="installBarSteps"></div>
+  </div>
+
   <div id="streakSlot"></div>
 
   <div class="section">
@@ -704,9 +724,10 @@ var SUPABASE_KEY = "sb_publishable_3Bn5vHh4AXyTu2tehjyShg_ef6kwtH2";
 var GUEST_FN_URL = SUPABASE_URL + "/functions/v1/guest-signup";
 var GUEST_EMAIL_DOMAIN = "@guest.ledger.local";
 
-var APP_VERSION = "1.4.0";
+var APP_VERSION = "1.4.1";
 // Newest first. `v` is the version an item shipped in.
 var CHANGELOG = [
+  { v:"1.4.1", title:"Back button & install prompt", body:"Your phone's back button now closes sheets and Settings panels instead of leaving the app. An install prompt also stays on the home screen until Ledger is added to your home screen." },
   { v:"1.4.0", title:"Notifications", body:"A bell icon with a notifications panel — get in-app alerts when you hit 50%, 80% or 100% of your overall budget or any category cap, plus month-end reminders and streak milestones." },
   { v:"1.3.0", title:"Streak tracker", body:"A daily-logging streak card on the home screen — current streak, your best-ever record, and a weekly day tracker to keep the habit going." },
   { v:"1.2.0", title:"Category budgets", body:"Set optional spending caps on specific categories (e.g. Groceries). Progress bars on the home screen turn orange then red as you approach or pass a cap." },
@@ -817,6 +838,28 @@ function isStandalone(){
 function isIOS(){
   return /iphone|ipad|ipod/i.test(window.navigator.userAgent) && !window.MSStream;
 }
+function isAndroid(){ return /android/i.test(window.navigator.userAgent); }
+
+// ---- Back-button layer stack ----
+// Every overlay/panel pushes a history entry so the phone's hardware/gesture
+// back button closes that layer instead of leaving the app.
+var layerStack=[];
+function openLayer(id,closeFn){
+  layerStack.push({id:id,close:closeFn});
+  try{ history.pushState({ledgerLayer:id},""); }catch(e){}
+}
+function closeLayer(id){
+  for(var i=layerStack.length-1;i>=0;i--){
+    if(layerStack[i].id===id){ history.go(-(layerStack.length-i)); return true; }
+  }
+  return false;
+}
+window.addEventListener("popstate",function(){
+  if(layerStack.length){
+    var top=layerStack.pop();
+    try{ top.close(); }catch(e){}
+  }
+});
 // Android/Chrome fires this when the app is installable — capture it for our button
 window.addEventListener("beforeinstallprompt", function(e){
   e.preventDefault();
@@ -825,39 +868,47 @@ window.addEventListener("beforeinstallprompt", function(e){
 });
 window.addEventListener("appinstalled", function(){
   deferredInstallPrompt = null;
-  var b=document.getElementById("installBanner"); if(b) b.style.display="none";
+  refreshInstallBanner();
 });
+var IOS_STEPS='Tap the <strong>Share</strong> button <span aria-hidden="true">⎋</span> in your browser bar, then choose <strong>“Add to Home Screen”</strong>.';
+var ANDROID_STEPS='Open your browser menu <strong>⋮</strong> and choose <strong>“Install app”</strong> or <strong>“Add to Home screen”</strong>.';
+function canOfferInstall(){
+  if(isStandalone()) return false;
+  return isIOS() || isAndroid() || !!deferredInstallPrompt;
+}
 function refreshInstallBanner(){
+  var show=canOfferInstall();
+  // Auth screen banner
   var banner=document.getElementById("installBanner");
-  if(!banner) return;
-  // Already installed / running as app → never show
-  if(isStandalone()){ banner.style.display="none"; return; }
-  if(isIOS()){
-    // iOS can't auto-prompt: show the button, and reveal Share-menu steps on tap
-    banner.style.display="block";
-    document.getElementById("installBtn").style.display="block";
-  } else if(deferredInstallPrompt){
-    // Android/Chrome: real install prompt available
-    banner.style.display="block";
-    document.getElementById("installBtn").style.display="block";
-    document.getElementById("installIosSteps").style.display="none";
-  } else {
-    // Desktop or unsupported browser: hide (nothing useful to offer)
-    banner.style.display="none";
+  if(banner){
+    banner.style.display=show?"block":"none";
+    var ib=document.getElementById("installBtn"); if(ib) ib.style.display="block";
+    if(!show){ var s1=document.getElementById("installIosSteps"); if(s1) s1.style.display="none"; }
+  }
+  // In-app bar (above the streak card)
+  var bar=document.getElementById("installBarApp");
+  if(bar){
+    bar.style.display=show?"block":"none";
+    var sub=document.getElementById("installBarSub");
+    if(sub) sub.textContent=deferredInstallPrompt
+      ? "One tap \u2014 full screen, faster, right on your home screen."
+      : "Add it to your home screen for the full app.";
+    if(!show){ var s2=document.getElementById("installBarSteps"); if(s2) s2.style.display="none"; }
   }
 }
-var installBtnEl=document.getElementById("installBtn");
-if(installBtnEl){
-  installBtnEl.addEventListener("click", function(){
-    if(deferredInstallPrompt){
-      deferredInstallPrompt.prompt();
-      deferredInstallPrompt.userChoice.then(function(){ deferredInstallPrompt=null; });
-    } else if(isIOS()){
-      // reveal the manual Share-menu instructions
-      document.getElementById("installIosSteps").style.display="block";
-    }
-  });
+function doInstall(stepsId){
+  if(deferredInstallPrompt){
+    deferredInstallPrompt.prompt();
+    deferredInstallPrompt.userChoice.then(function(){ deferredInstallPrompt=null; refreshInstallBanner(); });
+    return;
+  }
+  var el=document.getElementById(stepsId);
+  if(el){ el.innerHTML=isIOS()?IOS_STEPS:ANDROID_STEPS; el.style.display="block"; }
 }
+var installBtnEl=document.getElementById("installBtn");
+if(installBtnEl){ installBtnEl.addEventListener("click", function(){ doInstall("installIosSteps"); }); }
+var installBarBtnEl=document.getElementById("installBarBtn");
+if(installBarBtnEl){ installBarBtnEl.addEventListener("click", function(){ doInstall("installBarSteps"); }); }
 
 // ---- Supabase helpers ----
 function sbFetch(path, method, body, token, extraHeaders){
@@ -1387,6 +1438,7 @@ function render(){
     balEl.classList.toggle("neg",bal<0);
   }
   renderNudge();
+  refreshInstallBanner();
   renderStreakCard();
   refreshBell();
   renderDonut(mk,totals);
@@ -1587,13 +1639,14 @@ function openNotif(){
     }).join("");
   }
   document.getElementById("notifOverlay").classList.add("open");
+  openLayer("notif",function(){ document.getElementById("notifOverlay").classList.remove("open"); });
   // mark all as seen when opened (they've now been viewed)
   var changed=false;
   alerts.forEach(function(a){ if(!state.alertsSeen[a.id]){ state.alertsSeen[a.id]=true; changed=true; } });
   if(changed){ doSave(); }
   refreshBell();
 }
-function closeNotif(){ document.getElementById("notifOverlay").classList.remove("open"); }
+function closeNotif(){ if(!closeLayer("notif")) document.getElementById("notifOverlay").classList.remove("open"); }
 document.getElementById("bellBtn").addEventListener("click",openNotif);
 document.getElementById("notifClose").addEventListener("click",closeNotif);
 document.getElementById("notifOverlay").addEventListener("click",function(e){ if(e.target===this) closeNotif(); });
@@ -1719,9 +1772,10 @@ function openTxSheet(tx){
   document.getElementById("txDesc").value=tx?(tx.description||""):"";
   document.getElementById("txDate").value=tx?tx.date:(lastUsed.date||todayISO());
   txOverlay.classList.add("open");
+  openLayer("tx",function(){ txOverlay.classList.remove("open"); editingId=null; });
   setTimeout(function(){ document.getElementById("txAmount").focus(); },300);
 }
-function closeTxSheet(){ txOverlay.classList.remove("open"); editingId=null; }
+function closeTxSheet(){ if(!closeLayer("tx")){ txOverlay.classList.remove("open"); editingId=null; } }
 function setTypeButtons(type){
   currentType=type;
   document.getElementById("typeExpenseBtn").classList.toggle("active",type==="expense");
@@ -1842,15 +1896,21 @@ function openSettingsPanel(id){
   }
   if(id==="panelAccount"){ renderAccountInfo(); }
   if(id==="panelAbout"){ renderAbout(); }
+  openLayer("settingsPanel",showSettingsMenu);
 }
 function openSettings(){
   showSettingsMenu();
   settingsOverlay.classList.add("open");
+  openLayer("settings",function(){ settingsOverlay.classList.remove("open"); });
 }
-function closeSettings(){ settingsOverlay.classList.remove("open"); }
+function closeSettings(){
+  if(!closeLayer("settings")) settingsOverlay.classList.remove("open");
+}
 document.getElementById("settingsBtn").addEventListener("click",openSettings);
 document.getElementById("settingsClose").addEventListener("click",closeSettings);
-document.getElementById("settingsBack").addEventListener("click",showSettingsMenu);
+document.getElementById("settingsBack").addEventListener("click",function(){
+  if(!closeLayer("settingsPanel")) showSettingsMenu();
+});
 settingsOverlay.addEventListener("click",function(e){ if(e.target===settingsOverlay) closeSettings(); });
 Array.prototype.forEach.call(document.querySelectorAll(".settings-item[data-panel]"),function(btn){
   btn.addEventListener("click",function(){ openSettingsPanel(btn.getAttribute("data-panel")); });
@@ -2067,9 +2127,10 @@ function showConfirm(title,msg,onOk){
   document.getElementById("confirmMsg").textContent=msg;
   pendingConfirmAction=onOk;
   confirmOverlay.classList.add("open");
+  openLayer("confirm",function(){ confirmOverlay.classList.remove("open"); pendingConfirmAction=null; });
 }
-document.getElementById("confirmCancel").addEventListener("click",function(){ confirmOverlay.classList.remove("open"); pendingConfirmAction=null; });
-document.getElementById("confirmOk").addEventListener("click",function(){ confirmOverlay.classList.remove("open"); if(pendingConfirmAction) pendingConfirmAction(); pendingConfirmAction=null; });
+document.getElementById("confirmCancel").addEventListener("click",function(){ if(!closeLayer("confirm")){ confirmOverlay.classList.remove("open"); pendingConfirmAction=null; } });
+document.getElementById("confirmOk").addEventListener("click",function(){ var act=pendingConfirmAction; if(!closeLayer("confirm")) confirmOverlay.classList.remove("open"); pendingConfirmAction=null; if(act) act(); });
 
 // ---- PDF export ----
 function buildPrintArea(){
