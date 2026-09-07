@@ -683,9 +683,22 @@ function refreshToken(refresh_token){
 }
 
 // ---- Cloud data ----
+// dataLoaded becomes true ONLY after a genuinely successful load from the cloud.
+// Saves are blocked until then, so a failed load can never overwrite real data with empties.
+var dataLoaded = false;
 function loadCloudData(token, userId){
+  dataLoaded = false;
   return sbFetch("/rest/v1/user_data?user_id=eq."+userId+"&select=data","GET",null,token)
-    .then(function(r){ return r.json(); })
+    .then(function(r){
+      // CRITICAL: a stale/expired token returns 401 here. If we don't detect it,
+      // we'd fall through with empty state and later overwrite the cloud copy.
+      if(!r.ok){
+        var err = new Error("load-failed-"+r.status);
+        err.status = r.status;
+        throw err;
+      }
+      return r.json();
+    })
     .then(function(rows){
       if(rows && rows.length && rows[0].data){
         var d = rows[0].data;
@@ -695,9 +708,11 @@ function loadCloudData(token, userId){
         state.budget = typeof d.budget==="number"?d.budget:0;
         state.currency = (d.currency && CURRENCIES[d.currency])?d.currency:"EUR";
         state.profile = (d.profile && typeof d.profile==="object")?{first:d.profile.first||"",last:d.profile.last||""}:{first:"",last:""};
+        dataLoaded = true;
         return true; // existing data found
       }
-      return false; // brand-new account, no row yet
+      dataLoaded = true; // genuine empty account (no row yet) — safe to save from here
+      return false;
     });
 }
 // True upsert in one request: Prefer:resolution=merge-duplicates relies on a
@@ -708,6 +723,9 @@ function upsertUserData(){
 }
 function flushSave(){
   if(!currentUser) return Promise.resolve();
+  // SAFETY: never write to the cloud until we've confirmed a successful load.
+  // This prevents an empty/half-initialised state from clobbering real data.
+  if(!dataLoaded){ console.warn("Save blocked: data not loaded yet"); return Promise.resolve(); }
   var sb = document.getElementById("syncBar");
   return upsertUserData()
     .then(function(r){
@@ -741,6 +759,7 @@ function flushSave(){
 }
 function doSave(){
   if(!currentUser) return;
+  if(!dataLoaded) return; // don't even schedule a save before data is safely loaded
   clearTimeout(saveTimer);
   saveTimer = setTimeout(flushSave, 600);
 }
@@ -771,16 +790,21 @@ function boot(){
       showApp(verified ? "verified" : "returning");
     })
     .catch(function(){
+      // Load failed (usually an expired token). Refresh and retry ONCE.
+      // If anything in this recovery path fails, send them to sign in —
+      // we must never fall through and show the app with empty data.
       if(session.refresh_token){
         setLoading("Refreshing session…");
         refreshToken(session.refresh_token).then(function(d){
-          if(d.access_token){
+          if(d && d.access_token){
             saveSession(d);
             currentUser = sessionToUser(d);
-            return loadCloudData(d.access_token, d.user.id).then(function(){ showApp("returning"); });
-          } else { saveSession(null); showAuth(); }
-        }).catch(function(){ saveSession(null); showAuth(); });
-      } else { saveSession(null); showAuth(); }
+            return loadCloudData(d.access_token, d.user.id)
+              .then(function(){ showApp("returning"); })
+              .catch(function(){ saveSession(null); currentUser=null; showAuth(); });
+          } else { saveSession(null); currentUser=null; showAuth(); }
+        }).catch(function(){ saveSession(null); currentUser=null; showAuth(); });
+      } else { saveSession(null); currentUser=null; showAuth(); }
     });
 }
 function sessionToUser(d){
@@ -1081,9 +1105,11 @@ document.getElementById("recoverResetBtn").addEventListener("click", function(){
 function freshState(){ return {transactions:[],categories:DEFAULT_CATEGORIES.slice(),incomeCategories:DEFAULT_INCOME_CATEGORIES.slice(),budget:0,currency:"EUR",profile:{first:"",last:""}}; }
 document.getElementById("signOutBtn").addEventListener("click",function(){
   showConfirm("Sign out?","You'll need to sign in again on this device.",function(){
+    if(saveTimer){ clearTimeout(saveTimer); saveTimer=null; } // cancel any pending save
     if(currentUser) signOut(currentUser.token).catch(function(){});
     saveSession(null);
     currentUser=null;
+    dataLoaded=false; // block saves until a real load happens again
     state=freshState();
     closeSettings();
     showAuth();
