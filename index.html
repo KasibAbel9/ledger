@@ -164,6 +164,18 @@ body[data-theme="day"] .balance-row .label{color:#3A2A1E;}
 .cat-bar-track{height:6px;background:var(--surface-2);border-radius:99px;overflow:hidden;}
 .cat-bar-fill{height:100%;border-radius:99px;transition:width .5s ease;}
 .cat-amount{font-size:13.5px;color:var(--text-dim);flex-shrink:0;text-align:right;font-variant-numeric:tabular-nums;font-weight:600;min-width:60px;}
+.cat-cap{margin-top:6px;}
+.cat-cap-track{height:4px;background:var(--surface-2);border-radius:99px;overflow:hidden;}
+.cat-cap-fill{height:100%;border-radius:99px;transition:width .5s ease;}
+.cat-cap-txt{display:block;font-size:10.5px;font-weight:600;margin-top:3px;}
+.cat-budget-add{display:flex;gap:8px;margin-top:14px;}
+.cat-budget-add select{flex:1.4;min-width:0;background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:12px 13px;border-radius:var(--radius-sm);font-size:14px;appearance:none;}
+.cat-budget-add input{flex:1;min-width:0;background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:12px 13px;border-radius:var(--radius-sm);font-size:16px;}
+.cat-budget-add button{background:var(--accent);color:var(--accent-ink);border:none;border-radius:var(--radius-sm);padding:0 16px;font-size:13px;font-weight:700;flex-shrink:0;}
+.cat-budget-row{display:flex;align-items:center;justify-content:space-between;padding:9px 0;border-bottom:1px solid var(--border);}
+.cat-budget-row .cbname{font-size:14px;font-weight:600;}
+.cat-budget-row .cbamt{font-size:13px;color:var(--text-dim);font-weight:600;margin-left:auto;margin-right:12px;font-variant-numeric:tabular-nums;}
+.cat-budget-row button{background:none;border:none;color:var(--text-faint);font-size:13px;}
 
 .day-group{margin-bottom:6px;}
 .day-heading{font-size:12px;color:var(--text-faint);padding:12px 0 4px;border-bottom:1px solid var(--border);font-weight:600;}
@@ -464,6 +476,15 @@ body[data-theme="day"] .balance-row .label{color:#3A2A1E;}
       <button type="button" id="settingsNewIncomeCatAdd">Add</button>
     </div>
 
+    <div class="field" style="margin-top:22px;margin-bottom:8px;"><label>Category budgets</label></div>
+    <p style="font-size:12px;color:var(--text-faint);margin:0 0 12px;line-height:1.5;">Optional spending caps for specific expense categories. Leave the rest uncapped. These show as progress bars on the home screen.</p>
+    <div id="catBudgetList"></div>
+    <div class="cat-budget-add">
+      <select id="catBudgetSelect"></select>
+      <input type="number" id="catBudgetAmount" inputmode="decimal" step="1" min="0" placeholder="Cap">
+      <button type="button" id="catBudgetAddBtn">Set</button>
+    </div>
+
     <div id="addEmailSection" style="display:none;margin-top:22px;">
       <div class="field" style="margin-bottom:8px;"><label>Secure this account with email</label></div>
       <p style="font-size:12px;color:var(--text-faint);margin:0 0 10px;line-height:1.5;">Add an email + password so you can recover this account if you forget your PIN. Your data stays exactly as it is.</p>
@@ -532,6 +553,7 @@ var state = {
   categories:DEFAULT_CATEGORIES.slice(),
   incomeCategories:DEFAULT_INCOME_CATEGORIES.slice(),
   budget:0,
+  categoryBudgets:{},
   currency:"EUR",
   profile:{ first:"", last:"" }
 };
@@ -706,6 +728,7 @@ function loadCloudData(token, userId){
         state.categories = (Array.isArray(d.categories)&&d.categories.length)?d.categories:DEFAULT_CATEGORIES.slice();
         state.incomeCategories = (Array.isArray(d.incomeCategories)&&d.incomeCategories.length)?d.incomeCategories:DEFAULT_INCOME_CATEGORIES.slice();
         state.budget = typeof d.budget==="number"?d.budget:0;
+        state.categoryBudgets = (d.categoryBudgets && typeof d.categoryBudgets==="object")?d.categoryBudgets:{};
         state.currency = (d.currency && CURRENCIES[d.currency])?d.currency:"EUR";
         state.profile = (d.profile && typeof d.profile==="object")?{first:d.profile.first||"",last:d.profile.last||""}:{first:"",last:""};
         dataLoaded = true;
@@ -1102,7 +1125,7 @@ document.getElementById("recoverResetBtn").addEventListener("click", function(){
 });
 
 // ---- Sign out ----
-function freshState(){ return {transactions:[],categories:DEFAULT_CATEGORIES.slice(),incomeCategories:DEFAULT_INCOME_CATEGORIES.slice(),budget:0,currency:"EUR",profile:{first:"",last:""}}; }
+function freshState(){ return {transactions:[],categories:DEFAULT_CATEGORIES.slice(),incomeCategories:DEFAULT_INCOME_CATEGORIES.slice(),budget:0,categoryBudgets:{},currency:"EUR",profile:{first:"",last:""}}; }
 document.getElementById("signOutBtn").addEventListener("click",function(){
   showConfirm("Sign out?","You'll need to sign in again on this device.",function(){
     if(saveTimer){ clearTimeout(saveTimer); saveTimer=null; } // cancel any pending save
@@ -1243,11 +1266,22 @@ function renderCategoryList(mk,totals){
     var color=CAT_COLORS[i%CAT_COLORS.length];
     var pct=Math.round((c.total/spent)*100);
     var initial=c.name.trim().charAt(0).toUpperCase()||"?";
+    // Optional per-category cap line
+    var capHtml="";
+    var cap=state.categoryBudgets&&state.categoryBudgets[c.name];
+    if(typeof cap==="number" && cap>0){
+      var capPct=(c.total/cap)*100;
+      var capColor=capPct>=100?"var(--brick)":capPct>=80?"var(--accent)":"var(--sage)";
+      var capWidth=Math.min(100,capPct);
+      capHtml='<div class="cat-cap"><div class="cat-cap-track"><div class="cat-cap-fill" style="width:'+capWidth+'%;background:'+capColor+';"></div></div>'+
+        '<span class="cat-cap-txt" style="color:'+capColor+';">'+fmt(c.total)+' of '+fmt(cap)+'</span></div>';
+    }
     return '<div class="cat-row">'+
       '<div class="cat-icon" style="background:'+color+'26;color:'+color+';">'+initial+'</div>'+
       '<div class="cat-info">'+
         '<div class="cat-top"><span class="cat-name">'+escapeHtml(c.name)+'</span><span class="cat-pct">'+pct+'%</span></div>'+
         '<div class="cat-bar-track"><div class="cat-bar-fill" style="width:'+pct+'%;background:'+color+';"></div></div>'+
+        capHtml+
       '</div>'+
       '<div class="cat-amount">'+fmt(c.total)+'</div>'+
     '</div>';
@@ -1410,6 +1444,7 @@ function openSettings(){
   document.getElementById("addEmailSection").style.display=(currentUser&&currentUser.isGuest)?"block":"none";
   renderCatManageList();
   renderIncomeCatManageList();
+  renderCatBudgetList();
   settingsOverlay.classList.add("open");
 }
 function closeSettings(){ settingsOverlay.classList.remove("open"); }
@@ -1435,7 +1470,7 @@ function renderCatManageList(){
     btn.addEventListener("click",function(){
       var cat=btn.getAttribute("data-cat");
       var inUse=state.transactions.some(function(t){ return t.type==="expense"&&t.category===cat; });
-      function doRemove(){ state.categories=state.categories.filter(function(c){ return c!==cat; }); doSave(); renderCatManageList(); }
+      function doRemove(){ state.categories=state.categories.filter(function(c){ return c!==cat; }); if(state.categoryBudgets){ delete state.categoryBudgets[cat]; } doSave(); renderCatManageList(); }
       if(inUse) showConfirm('Remove "'+cat+'"?',"Past entries keep their label but it won't appear in the picker.",doRemove);
       else doRemove();
     });
@@ -1465,6 +1500,41 @@ document.getElementById("settingsNewIncomeCatAdd").addEventListener("click",func
   var name=input.value.trim(); if(!name) return;
   if(state.incomeCategories.indexOf(name)===-1) state.incomeCategories.push(name);
   input.value=""; doSave(); renderIncomeCatManageList();
+});
+
+// ---- Category budgets (per-category caps) ----
+function renderCatBudgetList(){
+  var listEl=document.getElementById("catBudgetList");
+  var names=Object.keys(state.categoryBudgets||{}).filter(function(k){ return typeof state.categoryBudgets[k]==="number" && state.categoryBudgets[k]>0; });
+  if(!names.length){
+    listEl.innerHTML='<p style="font-size:12px;color:var(--text-faint);margin:0 0 4px;">No category caps set yet.</p>';
+  } else {
+    listEl.innerHTML=names.map(function(n){
+      return '<div class="cat-budget-row"><span class="cbname">'+escapeHtml(n)+'</span><span class="cbamt">'+fmt(state.categoryBudgets[n])+'</span><button data-cb="'+escapeHtml(n)+'">remove</button></div>';
+    }).join("");
+    Array.prototype.forEach.call(listEl.querySelectorAll("button"),function(btn){
+      btn.addEventListener("click",function(){
+        var n=btn.getAttribute("data-cb");
+        delete state.categoryBudgets[n];
+        doSave(); renderCatBudgetList(); render();
+      });
+    });
+  }
+  // populate dropdown with expense categories that don't already have a cap
+  var sel=document.getElementById("catBudgetSelect");
+  var avail=state.categories.filter(function(c){ return !(state.categoryBudgets && state.categoryBudgets[c]>0); });
+  sel.innerHTML=avail.length ? avail.map(function(c){ return '<option value="'+escapeHtml(c)+'">'+escapeHtml(c)+'</option>'; }).join("")
+                             : '<option value="">All categories capped</option>';
+}
+document.getElementById("catBudgetAddBtn").addEventListener("click",function(){
+  var cat=document.getElementById("catBudgetSelect").value;
+  var amt=parseFloat(document.getElementById("catBudgetAmount").value);
+  if(!cat){ return; }
+  if(isNaN(amt)||amt<=0){ return; }
+  if(!state.categoryBudgets) state.categoryBudgets={};
+  state.categoryBudgets[cat]=amt;
+  document.getElementById("catBudgetAmount").value="";
+  doSave(); renderCatBudgetList(); render();
 });
 
 // ---- Guest → email upgrade ----
