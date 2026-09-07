@@ -176,6 +176,30 @@ body[data-theme="day"] .balance-row .label{color:#3A2A1E;}
 .cat-budget-row .cbname{font-size:14px;font-weight:600;}
 .cat-budget-row .cbamt{font-size:13px;color:var(--text-dim);font-weight:600;margin-left:auto;margin-right:12px;font-variant-numeric:tabular-nums;}
 .cat-budget-row button{background:none;border:none;color:var(--text-faint);font-size:13px;}
+.settings-head{display:flex;align-items:center;gap:8px;margin-bottom:18px;}
+.settings-back{background:none;border:none;color:var(--text);width:30px;height:30px;display:flex;align-items:center;justify-content:center;border-radius:50%;flex-shrink:0;}
+.settings-back:active{background:var(--surface-2);}
+.settings-item{width:100%;display:flex;align-items:center;justify-content:space-between;background:var(--surface-2);border:1px solid var(--border);color:var(--text);border-radius:var(--radius-sm);padding:15px 16px;font-size:15px;font-weight:600;margin-bottom:10px;}
+.settings-item:active{background:var(--border);}
+.settings-item .chev{color:var(--text-faint);font-size:20px;line-height:1;}
+.account-info{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;font-size:14px;line-height:1.6;}
+.account-info .ai-label{color:var(--text-faint);font-size:12px;}
+.account-info .ai-value{color:var(--text);font-weight:600;}
+.about-app{text-align:center;padding:8px 0 4px;}
+.about-name{font-size:22px;font-weight:800;color:var(--accent);letter-spacing:-0.4px;}
+.about-ver{font-size:12px;color:var(--text-faint);margin-top:2px;}
+.whatsnew-item{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:10px;}
+.whatsnew-item h5{margin:0 0 3px;font-size:14px;font-weight:700;color:var(--text);}
+.whatsnew-item p{margin:0;font-size:12.5px;color:var(--text-dim);line-height:1.5;}
+.feature-item{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13.5px;color:var(--text-dim);line-height:1.5;}
+.feature-item:last-child{border-bottom:none;}
+.feature-item b{color:var(--text);font-weight:700;}
+.whatsnew-card{margin:0 20px 18px;padding:14px 16px;border-radius:var(--radius-md);background:var(--surface);border:1px solid var(--accent);position:relative;}
+.whatsnew-card h4{margin:0 0 4px;font-size:14px;font-weight:800;color:var(--accent);}
+.whatsnew-card p{margin:0;font-size:12.5px;color:var(--text-dim);line-height:1.5;}
+.whatsnew-card .wn-actions{margin-top:10px;display:flex;gap:10px;}
+.whatsnew-card .wn-see{background:var(--accent);color:var(--accent-ink);border:none;border-radius:99px;padding:7px 14px;font-size:12px;font-weight:700;}
+.whatsnew-card .wn-dismiss{background:none;border:1px solid var(--border);color:var(--text-dim);border-radius:99px;padding:7px 14px;font-size:12px;font-weight:600;}
 
 .day-group{margin-bottom:6px;}
 .day-heading{font-size:12px;color:var(--text-faint);padding:12px 0 4px;border-bottom:1px solid var(--border);font-weight:600;}
@@ -402,6 +426,7 @@ body[data-theme="day"] .balance-row .label{color:#3A2A1E;}
   </div>
 
   <div id="welcomeSlot"></div>
+  <div id="whatsNewSlot"></div>
   <div id="nudgeSlot"></div>
 
   <div class="section">
@@ -452,64 +477,113 @@ body[data-theme="day"] .balance-row .label{color:#3A2A1E;}
 <div class="overlay" id="settingsOverlay">
   <div class="sheet">
     <div class="sheet-handle"></div>
-    <h3>Settings</h3>
 
-    <div class="row-2">
+    <!-- Settings header: back arrow (in sub-panels) + title -->
+    <div class="settings-head">
+      <button class="settings-back" id="settingsBack" style="display:none;" aria-label="Back">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+      </button>
+      <h3 id="settingsTitle" style="margin:0;">Settings</h3>
+    </div>
+
+    <!-- MENU -->
+    <div id="settingsMenu">
+      <button class="settings-item" data-panel="panelCategories"><span>Categories</span><span class="chev">›</span></button>
+      <button class="settings-item" data-panel="panelBudgets"><span>Budgets &amp; caps</span><span class="chev">›</span></button>
+      <button class="settings-item" data-panel="panelPrefs"><span>Preferences</span><span class="chev">›</span></button>
+      <button class="settings-item" data-panel="panelAccount"><span>Account &amp; security</span><span class="chev">›</span></button>
+      <button class="settings-item" data-panel="panelData"><span>Data</span><span class="chev">›</span></button>
+      <button class="settings-item" data-panel="panelAbout"><span>About &amp; what's new</span><span class="chev">›</span></button>
+      <button class="btn-danger" id="signOutBtn" style="margin-top:18px;">Sign out</button>
+      <div class="sheet-actions" style="margin-top:12px;">
+        <button class="btn-secondary" id="settingsClose" style="width:100%;">Close</button>
+      </div>
+    </div>
+
+    <!-- PANEL: Categories -->
+    <div class="settings-panel" id="panelCategories" style="display:none;">
+      <div class="field" style="margin-bottom:8px;"><label>Expense categories</label></div>
+      <div id="catManageList"></div>
+      <div class="new-cat-field" style="margin-top:14px;">
+        <input type="text" id="settingsNewCat" placeholder="New expense category">
+        <button type="button" id="settingsNewCatAdd">Add</button>
+      </div>
+      <div class="field" style="margin-top:22px;margin-bottom:8px;"><label>Income categories</label></div>
+      <div id="incomeCatManageList"></div>
+      <div class="new-cat-field" style="margin-top:14px;">
+        <input type="text" id="settingsNewIncomeCat" placeholder="New income category">
+        <button type="button" id="settingsNewIncomeCatAdd">Add</button>
+      </div>
+    </div>
+
+    <!-- PANEL: Budgets & caps -->
+    <div class="settings-panel" id="panelBudgets" style="display:none;">
+      <div class="field"><label id="budgetLabel">Monthly budget</label><input type="number" id="budgetInput" inputmode="decimal" step="1" min="0" placeholder="e.g. 1200"></div>
+      <button class="btn-primary" id="saveBudgetBtn" style="width:100%;margin-bottom:22px;">Save budget</button>
+      <div class="field" style="margin-bottom:8px;"><label>Category budgets</label></div>
+      <p style="font-size:12px;color:var(--text-faint);margin:0 0 12px;line-height:1.5;">Optional spending caps for specific expense categories. Leave the rest uncapped. These show as progress bars on the home screen.</p>
+      <div id="catBudgetList"></div>
+      <div class="cat-budget-add">
+        <select id="catBudgetSelect"></select>
+        <input type="number" id="catBudgetAmount" inputmode="decimal" step="1" min="0" placeholder="Cap">
+        <button type="button" id="catBudgetAddBtn">Set</button>
+      </div>
+    </div>
+
+    <!-- PANEL: Preferences -->
+    <div class="settings-panel" id="panelPrefs" style="display:none;">
       <div class="field"><label>Currency</label><select id="currencySelect"></select></div>
       <div class="field"><label>Language</label><select id="langSelect"><option value="en">English</option><option value="de">Deutsch</option></select></div>
+      <div class="field"><label>Theme</label>
+        <div class="type-toggle" style="margin-bottom:0;">
+          <button type="button" id="prefThemeDay">Day ☀️</button>
+          <button type="button" id="prefThemeNight">Night 🌙</button>
+        </div>
+      </div>
+      <button class="btn-primary" id="savePrefsBtn" style="width:100%;margin-top:8px;">Save preferences</button>
     </div>
 
-    <div class="field"><label id="budgetLabel">Monthly budget</label><input type="number" id="budgetInput" inputmode="decimal" step="1" min="0" placeholder="e.g. 1200"></div>
-    <button class="btn-primary" id="saveBudgetBtn" style="width:100%;margin-bottom:22px;">Save settings</button>
-
-    <div class="field" style="margin-bottom:8px;"><label>Expense categories</label></div>
-    <div id="catManageList"></div>
-    <div class="new-cat-field" style="margin-top:14px;">
-      <input type="text" id="settingsNewCat" placeholder="New expense category">
-      <button type="button" id="settingsNewCatAdd">Add</button>
+    <!-- PANEL: Account & security -->
+    <div class="settings-panel" id="panelAccount" style="display:none;">
+      <div id="accountInfo" class="account-info"></div>
+      <div id="addEmailSection" style="display:none;margin-top:8px;">
+        <div class="field" style="margin-bottom:8px;"><label>Secure this account with email</label></div>
+        <p style="font-size:12px;color:var(--text-faint);margin:0 0 10px;line-height:1.5;">Add an email + password so you can recover this account if you forget your PIN. Your data stays exactly as it is.</p>
+        <div class="field"><input type="email" id="upgradeEmail" inputmode="email" placeholder="you@email.com"></div>
+        <div class="field"><input type="password" id="upgradePassword" placeholder="New password (min 6)"></div>
+        <div class="field"><input type="password" id="upgradePassword2" placeholder="Confirm password"></div>
+        <label class="show-pw"><input type="checkbox" id="upgradeShowPw"> Show password</label>
+        <div class="auth-err" id="upgradeErr"></div>
+        <div class="auth-msg" id="upgradeMsg"></div>
+        <button class="btn-primary" id="upgradeBtn" style="width:100%;">Add email &amp; secure</button>
+      </div>
     </div>
 
-    <div class="field" style="margin-top:22px;margin-bottom:8px;"><label>Income categories</label></div>
-    <div id="incomeCatManageList"></div>
-    <div class="new-cat-field" style="margin-top:14px;">
-      <input type="text" id="settingsNewIncomeCat" placeholder="New income category">
-      <button type="button" id="settingsNewIncomeCatAdd">Add</button>
+    <!-- PANEL: Data -->
+    <div class="settings-panel" id="panelData" style="display:none;">
+      <div class="field" style="margin-bottom:8px;"><label>Import from Excel</label></div>
+      <p style="font-size:12px;color:var(--text-faint);margin:0 0 10px;line-height:1.5;">Arrange columns as <strong style="color:var(--text-dim);">Date, Description, Category, Expense, Income</strong> in Excel, select rows, copy, paste below.</p>
+      <div class="field">
+        <textarea id="importTextarea" rows="4" placeholder="2026-08-01&#9;sim.de&#9;Utilities&#9;6,99&#9;" style="width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:12px 13px;border-radius:var(--radius-sm);font-size:13.5px;resize:vertical;"></textarea>
+      </div>
+      <button class="btn-primary" id="importBtn" style="width:100%;">Parse &amp; import</button>
+      <p id="importResult" style="font-size:12.5px;color:var(--text-dim);margin:10px 0 0;"></p>
+      <button class="btn-danger" id="resetDataBtn" style="margin-top:22px;">Erase all my data</button>
     </div>
 
-    <div class="field" style="margin-top:22px;margin-bottom:8px;"><label>Category budgets</label></div>
-    <p style="font-size:12px;color:var(--text-faint);margin:0 0 12px;line-height:1.5;">Optional spending caps for specific expense categories. Leave the rest uncapped. These show as progress bars on the home screen.</p>
-    <div id="catBudgetList"></div>
-    <div class="cat-budget-add">
-      <select id="catBudgetSelect"></select>
-      <input type="number" id="catBudgetAmount" inputmode="decimal" step="1" min="0" placeholder="Cap">
-      <button type="button" id="catBudgetAddBtn">Set</button>
+    <!-- PANEL: About & what's new -->
+    <div class="settings-panel" id="panelAbout" style="display:none;">
+      <div class="about-app">
+        <div class="about-name">Ledger</div>
+        <div class="about-ver" id="aboutVersion">Version —</div>
+      </div>
+      <div class="field" style="margin-top:18px;margin-bottom:8px;"><label>What's new</label></div>
+      <div id="whatsNewList"></div>
+      <div class="field" style="margin-top:22px;margin-bottom:8px;"><label>Features</label></div>
+      <div id="featuresList"></div>
+      <p class="hint">Add this app to your home screen to use it like a real app. Your data syncs to the cloud — log in from any device. Your entries are private to you.</p>
     </div>
 
-    <div id="addEmailSection" style="display:none;margin-top:22px;">
-      <div class="field" style="margin-bottom:8px;"><label>Secure this account with email</label></div>
-      <p style="font-size:12px;color:var(--text-faint);margin:0 0 10px;line-height:1.5;">Add an email + password so you can recover this account if you forget your PIN. Your data stays exactly as it is.</p>
-      <div class="field"><input type="email" id="upgradeEmail" inputmode="email" placeholder="you@email.com"></div>
-      <div class="field"><input type="password" id="upgradePassword" placeholder="New password (min 6)"></div>
-      <div class="field"><input type="password" id="upgradePassword2" placeholder="Confirm password"></div>
-      <label class="show-pw"><input type="checkbox" id="upgradeShowPw"> Show password</label>
-      <div class="auth-err" id="upgradeErr"></div>
-      <div class="auth-msg" id="upgradeMsg"></div>
-      <button class="btn-primary" id="upgradeBtn" style="width:100%;">Add email &amp; secure</button>
-    </div>
-
-    <div class="field" style="margin-top:22px;margin-bottom:8px;"><label>Import from Excel</label></div>
-    <p style="font-size:12px;color:var(--text-faint);margin:0 0 10px;line-height:1.5;">Arrange columns as <strong style="color:var(--text-dim);">Date, Description, Category, Expense, Income</strong> in Excel, select rows, copy, paste below.</p>
-    <div class="field">
-      <textarea id="importTextarea" rows="4" placeholder="2026-08-01&#9;sim.de&#9;Utilities&#9;6,99&#9;" style="width:100%;background:var(--surface-2);border:1px solid var(--border);color:var(--text);padding:12px 13px;border-radius:var(--radius-sm);font-size:13.5px;resize:vertical;"></textarea>
-    </div>
-    <button class="btn-primary" id="importBtn" style="width:100%;">Parse &amp; import</button>
-    <p id="importResult" style="font-size:12.5px;color:var(--text-dim);margin:10px 0 0;"></p>
-    <button class="btn-danger" id="resetDataBtn" style="margin-top:22px;">Erase all my data</button>
-    <button class="btn-danger" id="signOutBtn" style="margin-top:8px;border-color:var(--border);color:var(--text-dim);">Sign out</button>
-    <p class="hint">Add this app to your home screen to use it like a real app. Your data syncs to the cloud — log in from any device.</p>
-    <div class="sheet-actions" style="margin-top:18px;">
-      <button class="btn-secondary" id="settingsClose" style="width:100%;">Close</button>
-    </div>
   </div>
 </div>
 
@@ -537,6 +611,27 @@ var SUPABASE_URL = "https://issreohiuzgbsujcdexq.supabase.co";
 var SUPABASE_KEY = "sb_publishable_3Bn5vHh4AXyTu2tehjyShg_ef6kwtH2";
 var GUEST_FN_URL = SUPABASE_URL + "/functions/v1/guest-signup";
 var GUEST_EMAIL_DOMAIN = "@guest.ledger.local";
+
+var APP_VERSION = "1.2.0";
+// Newest first. `v` is the version an item shipped in.
+var CHANGELOG = [
+  { v:"1.2.0", title:"Category budgets", body:"Set optional spending caps on specific categories (e.g. Groceries). Progress bars on the home screen turn orange then red as you approach or pass a cap." },
+  { v:"1.2.0", title:"Reorganised Settings", body:"Settings is now split into clear sections — Categories, Budgets, Preferences, Account, Data, and About." },
+  { v:"1.1.0", title:"Quick / Guest login", body:"Create an account with just a username + 6-digit PIN, no email required. Add an email later to secure it." },
+  { v:"1.1.0", title:"Multiple currencies", body:"Choose EUR, USD, INR or AED for your account." },
+  { v:"1.1.0", title:"Faster logging & undo", body:"The app remembers your last category, offers ‘Save & add another’, and lets you undo a delete." }
+];
+var FEATURES = [
+  { name:"Track expenses & income", desc:"Log entries by category and see monthly totals." },
+  { name:"Monthly budget", desc:"Set a budget and watch ‘Left this month’ update." },
+  { name:"Category caps", desc:"Optional per-category spending limits." },
+  { name:"Quick / Guest login", desc:"Username + PIN, no email needed." },
+  { name:"Multi-currency", desc:"EUR, USD, INR, AED." },
+  { name:"Day / night themes", desc:"Sun-moon toggle, auto by time of day." },
+  { name:"Excel import", desc:"Paste rows straight from a spreadsheet." },
+  { name:"PDF export", desc:"Printable monthly statement." },
+  { name:"Install to home screen", desc:"Use it like a native app, offline-friendly shell." }
+];
 var DEFAULT_CATEGORIES = ["Groceries","Food & Dining","Transport","Utilities","Rent","Family","Friends","Healthcare","Shopping","Self Growth","Entertainment & Travel","Sadaqa","Miscellaneous"];
 var DEFAULT_INCOME_CATEGORIES = ["Income source 1","Income source 2"];
 
@@ -901,6 +996,7 @@ function showApp(mode){
     else sub.textContent = "welcome back";
   }
   render();
+  renderWhatsNewCard();
   // Full-width welcome banner for first-time users
   if(mode==="new") showWelcomeBanner("Welcome, "+first+"! 🎉","Log your first expense with the + button to get started.");
   else if(mode==="verified") showWelcomeBanner("Email verified — welcome, "+first+"!","Your account is confirmed and your data is syncing.");
@@ -1433,36 +1529,121 @@ document.getElementById("undoToastBtn").addEventListener("click",function(){
 
 // ---- Settings ----
 var settingsOverlay=document.getElementById("settingsOverlay");
+var SETTINGS_PANELS = ["panelCategories","panelBudgets","panelPrefs","panelAccount","panelData","panelAbout"];
+var PANEL_TITLES = { panelCategories:"Categories", panelBudgets:"Budgets & caps", panelPrefs:"Preferences", panelAccount:"Account & security", panelData:"Data", panelAbout:"About & what's new" };
+function showSettingsMenu(){
+  document.getElementById("settingsMenu").style.display="block";
+  SETTINGS_PANELS.forEach(function(p){ document.getElementById(p).style.display="none"; });
+  document.getElementById("settingsBack").style.display="none";
+  document.getElementById("settingsTitle").textContent="Settings";
+}
+function openSettingsPanel(id){
+  document.getElementById("settingsMenu").style.display="none";
+  SETTINGS_PANELS.forEach(function(p){ document.getElementById(p).style.display=(p===id?"block":"none"); });
+  document.getElementById("settingsBack").style.display="flex";
+  document.getElementById("settingsTitle").textContent=PANEL_TITLES[id]||"Settings";
+  // lazy-fill each panel's dynamic content when opened
+  if(id==="panelCategories"){ renderCatManageList(); renderIncomeCatManageList(); }
+  if(id==="panelBudgets"){
+    document.getElementById("budgetInput").value=state.budget||"";
+    document.getElementById("budgetLabel").textContent="Monthly budget ("+state.currency+")";
+    renderCatBudgetList();
+  }
+  if(id==="panelPrefs"){
+    var cs=document.getElementById("currencySelect");
+    cs.innerHTML=Object.keys(CURRENCIES).map(function(c){ return '<option value="'+c+'"'+(c===state.currency?' selected':'')+'>'+c+'</option>'; }).join("");
+    try{ document.getElementById("langSelect").value=localStorage.getItem("ledger_lang")||"en"; }catch(e){}
+    setPrefThemeButtons(currentTheme);
+  }
+  if(id==="panelAccount"){ renderAccountInfo(); }
+  if(id==="panelAbout"){ renderAbout(); }
+}
 function openSettings(){
-  document.getElementById("budgetInput").value=state.budget||"";
-  var cs=document.getElementById("currencySelect");
-  cs.innerHTML=Object.keys(CURRENCIES).map(function(c){ return '<option value="'+c+'"'+(c===state.currency?' selected':'')+'>'+c+'</option>'; }).join("");
-  var ls=document.getElementById("langSelect");
-  try{ ls.value=localStorage.getItem("ledger_lang")||"en"; }catch(e){}
-  document.getElementById("budgetLabel").textContent="Monthly budget ("+state.currency+")";
-  // show the "add email" section only for guest accounts
-  document.getElementById("addEmailSection").style.display=(currentUser&&currentUser.isGuest)?"block":"none";
-  renderCatManageList();
-  renderIncomeCatManageList();
-  renderCatBudgetList();
+  showSettingsMenu();
   settingsOverlay.classList.add("open");
 }
 function closeSettings(){ settingsOverlay.classList.remove("open"); }
 document.getElementById("settingsBtn").addEventListener("click",openSettings);
 document.getElementById("settingsClose").addEventListener("click",closeSettings);
+document.getElementById("settingsBack").addEventListener("click",showSettingsMenu);
 settingsOverlay.addEventListener("click",function(e){ if(e.target===settingsOverlay) closeSettings(); });
-document.getElementById("currencySelect").addEventListener("change",function(){
-  document.getElementById("budgetLabel").textContent="Monthly budget ("+this.value+")";
+Array.prototype.forEach.call(document.querySelectorAll(".settings-item[data-panel]"),function(btn){
+  btn.addEventListener("click",function(){ openSettingsPanel(btn.getAttribute("data-panel")); });
 });
+
+// Budget save (Budgets panel)
 document.getElementById("saveBudgetBtn").addEventListener("click",function(){
   var v=parseFloat(document.getElementById("budgetInput").value);
   state.budget=isNaN(v)||v<0?0:v;
+  doSave(); render();
+  var b=document.getElementById("saveBudgetBtn"); var o=b.textContent; b.textContent="Saved ✓"; setTimeout(function(){ b.textContent=o; },900);
+});
+// Preferences save (currency + language + theme)
+function setPrefThemeButtons(t){
+  document.getElementById("prefThemeDay").classList.toggle("active",t==="day");
+  document.getElementById("prefThemeNight").classList.toggle("active",t==="night");
+}
+document.getElementById("prefThemeDay").addEventListener("click",function(){ applyTheme("day"); try{localStorage.setItem("ledger_theme","day");}catch(e){} setPrefThemeButtons("day"); });
+document.getElementById("prefThemeNight").addEventListener("click",function(){ applyTheme("night"); try{localStorage.setItem("ledger_theme","night");}catch(e){} setPrefThemeButtons("night"); });
+document.getElementById("currencySelect").addEventListener("change",function(){
+  var lbl=document.getElementById("budgetLabel"); if(lbl) lbl.textContent="Monthly budget ("+this.value+")";
+});
+document.getElementById("savePrefsBtn").addEventListener("click",function(){
   var cur=document.getElementById("currencySelect").value;
   if(CURRENCIES[cur]) state.currency=cur;
   var lang=document.getElementById("langSelect").value;
   try{ localStorage.setItem("ledger_lang",lang); }catch(e){}
-  doSave(); render(); closeSettings();
+  doSave(); render();
+  var b=document.getElementById("savePrefsBtn"); var o=b.textContent; b.textContent="Saved ✓"; setTimeout(function(){ b.textContent=o; },900);
 });
+
+// Account info + email-upgrade visibility
+function renderAccountInfo(){
+  var el=document.getElementById("accountInfo");
+  var name=((state.profile.first||"")+" "+(state.profile.last||"")).trim()||"—";
+  var kind = currentUser&&currentUser.isGuest ? "Quick / Guest account" : "Email account";
+  var idLine = currentUser&&currentUser.isGuest
+    ? '<div><span class="ai-label">Username: </span><span class="ai-value">'+escapeHtml((currentUser.email||"").split("@")[0])+'</span></div>'
+    : '<div><span class="ai-label">Email: </span><span class="ai-value">'+escapeHtml(currentUser?currentUser.email:"")+'</span></div>';
+  el.innerHTML='<div><span class="ai-label">Name: </span><span class="ai-value">'+escapeHtml(name)+'</span></div>'+
+    idLine+
+    '<div><span class="ai-label">Type: </span><span class="ai-value">'+kind+'</span></div>';
+  document.getElementById("addEmailSection").style.display=(currentUser&&currentUser.isGuest)?"block":"none";
+}
+
+// About + What's New + Features
+function renderAbout(){
+  document.getElementById("aboutVersion").textContent="Version "+APP_VERSION;
+  document.getElementById("whatsNewList").innerHTML=CHANGELOG.slice(0,6).map(function(c){
+    return '<div class="whatsnew-item"><h5>'+escapeHtml(c.title)+'</h5><p>'+escapeHtml(c.body)+'</p></div>';
+  }).join("");
+  document.getElementById("featuresList").innerHTML=FEATURES.map(function(f){
+    return '<div class="feature-item"><b>'+escapeHtml(f.name)+'</b> — '+escapeHtml(f.desc)+'</div>';
+  }).join("");
+}
+
+// What's New dismissible card on the home screen (shows once per new version)
+function renderWhatsNewCard(){
+  var slot=document.getElementById("whatsNewSlot");
+  if(!slot) return;
+  var seen=null;
+  try{ seen=localStorage.getItem("ledger_seen_version"); }catch(e){}
+  if(seen===APP_VERSION){ slot.innerHTML=""; return; }
+  var latest=CHANGELOG.filter(function(c){ return c.v===APP_VERSION; });
+  if(!latest.length){ slot.innerHTML=""; return; }
+  var titles=latest.map(function(c){ return c.title; }).join(", ");
+  slot.innerHTML='<div class="whatsnew-card"><h4>✨ What\'s new in v'+APP_VERSION+'</h4><p>'+escapeHtml(titles)+'</p>'+
+    '<div class="wn-actions"><button class="wn-see" id="wnSee">See details</button><button class="wn-dismiss" id="wnDismiss">Dismiss</button></div></div>';
+  document.getElementById("wnSee").addEventListener("click",function(){
+    try{ localStorage.setItem("ledger_seen_version",APP_VERSION); }catch(e){}
+    slot.innerHTML="";
+    openSettings(); openSettingsPanel("panelAbout");
+  });
+  document.getElementById("wnDismiss").addEventListener("click",function(){
+    try{ localStorage.setItem("ledger_seen_version",APP_VERSION); }catch(e){}
+    slot.innerHTML="";
+  });
+}
 function renderCatManageList(){
   var el=document.getElementById("catManageList");
   el.innerHTML=state.categories.map(function(c){ return '<div class="cat-manage-row"><span>'+escapeHtml(c)+'</span><button data-cat="'+escapeHtml(c)+'">remove</button></div>'; }).join("");
