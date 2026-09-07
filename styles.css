@@ -261,9 +261,13 @@ body[data-theme="day"] .balance-row .label{color:#3A2A1E;}
 /* Overlays */
 .overlay{position:fixed;inset:0;background:rgba(10,9,13,.55);z-index:50;display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity .25s ease;}
 .overlay.open{opacity:1;pointer-events:auto;}
-.sheet{width:100%;max-width:460px;background:var(--surface);border-radius:20px 20px 0 0;padding:10px 22px 28px;transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1);max-height:88vh;overflow-y:auto;}
+.sheet{width:100%;max-width:460px;background:var(--surface);border-radius:20px 20px 0 0;padding:10px 22px 28px;transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1);max-height:88vh;overflow-y:auto;overscroll-behavior:contain;}
+/* while a finger is dragging the sheet we position it directly, no easing */
+.overlay.open .sheet.dragging{transition:none;}
 .overlay.open .sheet{transform:translateY(0);}
 .sheet-handle{width:36px;height:4px;background:var(--border);border-radius:99px;margin:6px auto 16px;}
+/* wider invisible grab area around the visible handle pill */
+.sheet-handle::before{content:"";display:block;position:relative;top:-14px;height:32px;}
 .sheet h3{font-weight:800;font-size:19px;margin:0 0 18px;letter-spacing:-0.3px;}
 .field select{background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239B96A6' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 13px center;padding-right:34px;}
 .type-toggle{display:flex;gap:8px;margin-bottom:18px;}

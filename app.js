@@ -6,9 +6,10 @@ var SUPABASE_KEY = "sb_publishable_3Bn5vHh4AXyTu2tehjyShg_ef6kwtH2";
 var GUEST_FN_URL = SUPABASE_URL + "/functions/v1/guest-signup";
 var GUEST_EMAIL_DOMAIN = "@guest.ledger.local";
 
-var APP_VERSION = "1.5.1";
+var APP_VERSION = "1.5.2";
 // Newest first. `v` is the version an item shipped in.
 var CHANGELOG = [
+  { v:"1.5.2", title:"Swipe sheets closed", body:"Drag down on any panel \u2014 Settings, Add entry, Notifications \u2014 to close it, the way the little handle always suggested. Swiping no longer reloads the page." },
   { v:"1.5.1", title:"Edit your name", body:"You can now change the name you signed up with under Settings \u2192 Account & security." },
   { v:"1.5.0", title:"No-spend days", body:"Spent nothing today? Tap \u201cDidn\u2019t spend anything today\u201d on the streak card and the day still counts. Your streak now tracks awareness, not spending." },
   { v:"1.4.1", title:"Back button & install prompt", body:"Your phone's back button now closes sheets and Settings panels instead of leaving the app. An install prompt also stays on the home screen until Ledger is added to your home screen." },
@@ -1510,6 +1511,60 @@ document.getElementById("exportBtn").addEventListener("click",function(){ buildP
 // ---- Month nav ----
 document.getElementById("prevMonth").addEventListener("click",function(){ viewMonthOffset--; render(); });
 document.getElementById("nextMonth").addEventListener("click",function(){ if(viewMonthOffset<0){viewMonthOffset++;render();} });
+
+// ---- Swipe-down-to-dismiss for bottom sheets ----
+// The little handle pill implies a drag gesture, so make it real. Without this
+// the swipe chains up to the page and fires Chrome's pull-to-refresh instead.
+function enableSheetDrag(overlayId, closeFn){
+  var overlay=document.getElementById(overlayId);
+  if(!overlay) return;
+  var sheet=overlay.querySelector(".sheet");
+  if(!sheet) return;
+  var startY=0, dy=0, startT=0, dragging=false;
+
+  sheet.addEventListener("touchstart", function(e){
+    if(e.touches.length!==1){ dragging=false; return; }
+    var tag=(e.target.tagName||"").toLowerCase();
+    // don't hijack the gesture from form controls
+    if(tag==="input"||tag==="textarea"||tag==="select"){ dragging=false; return; }
+    startY=e.touches[0].clientY;
+    dy=0; startT=Date.now();
+    // only drag when the sheet's own content is already scrolled to the top
+    dragging=(sheet.scrollTop<=0);
+  }, {passive:true});
+
+  sheet.addEventListener("touchmove", function(e){
+    if(!dragging) return;
+    dy=e.touches[0].clientY-startY;
+    if(dy<=0){
+      // pulled back up — hand control back to normal scrolling
+      sheet.classList.remove("dragging");
+      sheet.style.transform="";
+      return;
+    }
+    sheet.classList.add("dragging");
+    // slight resistance so it feels attached rather than loose
+    sheet.style.transform="translateY("+(dy*0.9)+"px)";
+    if(e.cancelable) e.preventDefault();   // this is what blocks pull-to-refresh
+  }, {passive:false});
+
+  function endDrag(){
+    if(!dragging){ return; }
+    var dt=Date.now()-startT;
+    var velocity=dy/(dt||1);
+    sheet.classList.remove("dragging");
+    sheet.style.transform="";
+    dragging=false;
+    // far enough, or a quick flick
+    if(dy>110 || (dy>40 && velocity>0.5)){ closeFn(); }
+    dy=0;
+  }
+  sheet.addEventListener("touchend", endDrag);
+  sheet.addEventListener("touchcancel", endDrag);
+}
+enableSheetDrag("txOverlay", closeTxSheet);
+enableSheetDrag("settingsOverlay", closeSettings);
+enableSheetDrag("notifOverlay", closeNotif);
 
 // ---- Start ----
 boot();
