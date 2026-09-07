@@ -16,7 +16,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="styles.css?v=1.5.0">
+<link rel="stylesheet" href="styles.css?v=1.5.1">
 </head>
 <body>
 
@@ -314,6 +314,17 @@
     <!-- PANEL: Account & security -->
     <div class="settings-panel" id="panelAccount" style="display:none;">
       <div id="accountInfo" class="account-info"></div>
+
+      <div id="editNameSection" style="margin-top:18px;">
+        <div class="field" style="margin-bottom:8px;"><label>Your name</label></div>
+        <p style="font-size:12px;color:var(--text-faint);margin:0 0 10px;line-height:1.5;">This is only used to greet you inside the app.</p>
+        <div class="field"><input type="text" id="profileFirst" placeholder="First name" autocomplete="given-name"></div>
+        <div class="field"><input type="text" id="profileLast" placeholder="Last name (optional)" autocomplete="family-name"></div>
+        <div class="auth-err" id="profileNameErr"></div>
+        <div class="auth-msg" id="profileNameMsg"></div>
+        <button class="btn-secondary" id="saveNameBtn" style="width:100%;">Save name</button>
+      </div>
+
       <div id="addEmailSection" style="display:none;margin-top:8px;">
         <div class="field" style="margin-bottom:8px;"><label>Secure this account with email</label></div>
         <p style="font-size:12px;color:var(--text-faint);margin:0 0 10px;line-height:1.5;">Add an email + password so you can recover this account if you forget your PIN. Your data stays exactly as it is.</p>
@@ -413,6 +424,6 @@
 
 <div id="printArea"></div>
 
-<script src="app.js?v=1.5.0"></script>
+<script src="app.js?v=1.5.1"></script>
 </body>
 </html>

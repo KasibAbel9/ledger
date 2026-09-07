@@ -6,9 +6,10 @@ var SUPABASE_KEY = "sb_publishable_3Bn5vHh4AXyTu2tehjyShg_ef6kwtH2";
 var GUEST_FN_URL = SUPABASE_URL + "/functions/v1/guest-signup";
 var GUEST_EMAIL_DOMAIN = "@guest.ledger.local";
 
-var APP_VERSION = "1.5.0";
+var APP_VERSION = "1.5.1";
 // Newest first. `v` is the version an item shipped in.
 var CHANGELOG = [
+  { v:"1.5.1", title:"Edit your name", body:"You can now change the name you signed up with under Settings \u2192 Account & security." },
   { v:"1.5.0", title:"No-spend days", body:"Spent nothing today? Tap \u201cDidn\u2019t spend anything today\u201d on the streak card and the day still counts. Your streak now tracks awareness, not spending." },
   { v:"1.4.1", title:"Back button & install prompt", body:"Your phone's back button now closes sheets and Settings panels instead of leaving the app. An install prompt also stays on the home screen until Ledger is added to your home screen." },
   { v:"1.4.0", title:"Notifications", body:"A bell icon with a notifications panel — get in-app alerts when you hit 50%, 80% or 100% of your overall budget or any category cap, plus month-end reminders and streak milestones." },
@@ -1271,7 +1272,30 @@ function renderAccountInfo(){
     idLine+
     '<div><span class="ai-label">Type: </span><span class="ai-value">'+kind+'</span></div>';
   document.getElementById("addEmailSection").style.display=(currentUser&&currentUser.isGuest)?"block":"none";
+  // fill the name editor with what's currently stored
+  document.getElementById("profileFirst").value=(state.profile&&state.profile.first)||"";
+  document.getElementById("profileLast").value=(state.profile&&state.profile.last)||"";
+  document.getElementById("profileNameErr").textContent="";
+  document.getElementById("profileNameMsg").textContent="";
 }
+
+// Save an edited name: lives in state.profile, so it syncs with everything else.
+document.getElementById("saveNameBtn").addEventListener("click",function(){
+  var errEl=document.getElementById("profileNameErr");
+  var msgEl=document.getElementById("profileNameMsg");
+  errEl.textContent=""; msgEl.textContent="";
+  var first=document.getElementById("profileFirst").value.trim();
+  var last=document.getElementById("profileLast").value.trim();
+  if(!first){ errEl.textContent="Please enter a first name."; return; }
+  if(first.length>40||last.length>40){ errEl.textContent="That's a bit long \u2014 keep it under 40 characters."; return; }
+  state.profile={first:first,last:last};
+  doSave();
+  renderAccountInfo();
+  render();               // refresh the welcome greeting on the home screen
+  msgEl.textContent="Name updated.";
+  setTimeout(function(){ msgEl.textContent=""; },2500);
+});
+
 
 // About + What's New + Features
 function renderAbout(){
