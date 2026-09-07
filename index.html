@@ -191,9 +191,22 @@ body[data-theme="day"] .balance-row .label{color:#3A2A1E;}
 .whatsnew-item{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:10px;}
 .whatsnew-item h5{margin:0 0 3px;font-size:14px;font-weight:700;color:var(--text);}
 .whatsnew-item p{margin:0;font-size:12.5px;color:var(--text-dim);line-height:1.5;}
-.feature-item{display:flex;gap:10px;padding:8px 0;border-bottom:1px solid var(--border);font-size:13.5px;color:var(--text-dim);line-height:1.5;}
+.feature-item{padding:10px 0;border-bottom:1px solid var(--border);line-height:1.5;}
 .feature-item:last-child{border-bottom:none;}
-.feature-item b{color:var(--text);font-weight:700;}
+.feature-item b{display:block;color:var(--text);font-weight:700;font-size:14px;margin-bottom:2px;}
+.feature-item span{color:var(--text-dim);font-size:12.5px;}
+.inline-link{background:none;border:none;color:var(--accent);font-weight:700;font-size:12px;padding:0;text-decoration:underline;text-underline-offset:2px;cursor:pointer;}
+.story-body{font-size:13.5px;color:var(--text-dim);line-height:1.7;}
+.story-body p{margin:0 0 14px;}
+.story-quote{border-left:3px solid var(--accent);padding:2px 0 2px 14px;margin:0 0 14px;color:var(--text);font-style:italic;font-size:13.5px;line-height:1.6;}
+.story-quote cite{display:block;margin-top:6px;font-style:normal;font-size:11.5px;color:var(--text-faint);}
+.story-soon{background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 16px;margin-top:6px;}
+.story-soon h5{margin:0 0 4px;font-size:13.5px;font-weight:800;color:var(--accent);}
+.story-soon p{margin:0;font-size:12.5px;color:var(--text-dim);line-height:1.6;}
+.app-footer{text-align:center;padding:22px 0 6px;margin-top:8px;border-top:1px solid var(--border);}
+.app-footer .made{font-size:12.5px;color:var(--text-dim);font-weight:600;}
+.app-footer .made .heart{color:var(--brick);}
+.app-footer .made-sub{font-size:11px;color:var(--text-faint);margin-top:3px;}
 .whatsnew-card{margin:0 20px 18px;padding:14px 16px;border-radius:var(--radius-md);background:var(--surface);border:1px solid var(--accent);position:relative;}
 .whatsnew-card h4{margin:0 0 4px;font-size:14px;font-weight:800;color:var(--accent);}
 .whatsnew-card p{margin:0;font-size:12.5px;color:var(--text-dim);line-height:1.5;}
@@ -333,12 +346,12 @@ body[data-theme="day"] .balance-row .label{color:#3A2A1E;}
   <!-- Guest / Quick account -->
   <div class="auth-form" id="guestWrap" style="display:none;">
     <div class="auth-subtabs">
-      <button class="auth-subtab active" id="guestTabNew">New account</button>
-      <button class="auth-subtab" id="guestTabReturning">I have one</button>
+      <button class="auth-subtab active" id="guestTabReturning">I have one</button>
+      <button class="auth-subtab" id="guestTabNew">New account</button>
     </div>
 
     <!-- guest: create -->
-    <div id="guestNewPanel">
+    <div id="guestNewPanel" style="display:none;">
       <div class="row-2">
         <div class="field"><label>First name</label><input type="text" id="guestFirst" autocomplete="given-name" placeholder="First"></div>
         <div class="field"><label>Last name</label><input type="text" id="guestLast" autocomplete="family-name" placeholder="Last"></div>
@@ -355,13 +368,14 @@ body[data-theme="day"] .balance-row .label{color:#3A2A1E;}
       <button class="btn-primary" id="guestCreateBtn">Create quick account</button>
     </div>
 
-    <!-- guest: returning -->
-    <div id="guestReturningPanel" style="display:none;">
+    <!-- guest: returning (shown first by default) -->
+    <div id="guestReturningPanel">
       <div class="field"><label>Username</label><input type="text" id="guestLoginUsername" autocomplete="off" placeholder="your username"></div>
       <div class="field"><label>6-digit PIN</label><input type="text" id="guestLoginPin" inputmode="numeric" maxlength="6" autocomplete="off" placeholder="your PIN"></div>
       <label class="show-pw"><input type="checkbox" id="guestLoginShowPin"> Show PIN</label>
       <div class="auth-err" id="guestLoginErr"></div>
       <button class="btn-primary" id="guestLoginBtn">Log in</button>
+      <p style="font-size:12px;color:var(--text-faint);margin-top:16px;text-align:center;">New here? <button type="button" id="guestGoNewLink" class="inline-link">Create a quick account</button></p>
     </div>
 
     <button type="button" class="link-btn" id="guestBackBtn">← Back</button>
@@ -494,6 +508,7 @@ body[data-theme="day"] .balance-row .label{color:#3A2A1E;}
       <button class="settings-item" data-panel="panelAccount"><span>Account &amp; security</span><span class="chev">›</span></button>
       <button class="settings-item" data-panel="panelData"><span>Data</span><span class="chev">›</span></button>
       <button class="settings-item" data-panel="panelAbout"><span>About &amp; what's new</span><span class="chev">›</span></button>
+      <button class="settings-item" data-panel="panelStory"><span>The story &amp; my mission</span><span class="chev">›</span></button>
       <button class="btn-danger" id="signOutBtn" style="margin-top:18px;">Sign out</button>
       <div class="sheet-actions" style="margin-top:12px;">
         <button class="btn-secondary" id="settingsClose" style="width:100%;">Close</button>
@@ -582,6 +597,33 @@ body[data-theme="day"] .balance-row .label{color:#3A2A1E;}
       <div class="field" style="margin-top:22px;margin-bottom:8px;"><label>Features</label></div>
       <div id="featuresList"></div>
       <p class="hint">Add this app to your home screen to use it like a real app. Your data syncs to the cloud — log in from any device. Your entries are private to you.</p>
+      <div class="app-footer">
+        <div class="made">Made with <span class="heart">♥</span> by Kasib Ahmed</div>
+        <div class="made-sub">A personal project, shared with friends.</div>
+      </div>
+    </div>
+
+    <!-- PANEL: The story & my mission -->
+    <div class="settings-panel" id="panelStory" style="display:none;">
+      <div class="story-body">
+        <p>Ledger started with a problem I kept running into myself: in an age where almost every payment is digital, money leaves your pocket invisibly. You tap, you pay, and you rarely get a real sense of <em>how much</em> you're spending or <em>where</em> it's actually going.</p>
+        <p>Tracking your daily expenses fixes that. It gives you back the awareness that cash used to force on us — a clear grip on the small, irrelevant spends that quietly drain away without you noticing.</p>
+        <p>But here's the part that matters most to me: <strong>this isn't about depriving yourself.</strong> You don't have to become a penny-pinching freak who never spends a dime on yourself or the people you love. It's the opposite. Managing your money well means that when you <em>do</em> spend, you spend <em>deliberately</em> — you know exactly where it's going, and how much of your budget is left this month. You spend where it truly counts: on yourself, your family, your loved ones.</p>
+        <div class="story-quote">
+          Morgan Housel's <em>The Psychology of Money</em> — the first book that started my own financial education — makes a point I keep coming back to: doing well with money has less to do with how smart you are and far more to do with how you behave. Real wealth is often the spending you <em>don't</em> see, and learning when you have "enough" is a quiet superpower.
+          <cite>— paraphrasing ideas from Morgan Housel, <em>The Psychology of Money</em></cite>
+        </div>
+        <p>Financial management is one of the oldest and most misunderstood skills there is. My mission with Ledger is to help others reach that same level of confidence in their spending — to be financially smart in an era built to make us spend the next dime, where every ad is engineered to reach into your pocket. The goal is to be the master of your money, not a slave to careless, unknowing spending.</p>
+        <div class="story-soon">
+          <h5>✨ Coming soon: Savings plans</h5>
+          <p>The next big thing we're building: Ledger will study <em>your</em> spending style — where and how you spend the most — find the weak spots where money could be saved, and help you build an effective plan toward your next big purchase.</p>
+        </div>
+        <p style="margin-top:16px;font-size:12.5px;color:var(--text-faint);">I'm always open to suggestions and I genuinely listen to criticism. This is built for you — tell me how to make it better.</p>
+      </div>
+      <div class="app-footer">
+        <div class="made">Made with <span class="heart">♥</span> by Kasib Ahmed</div>
+        <div class="made-sub">Ledger — spend deliberately.</div>
+      </div>
     </div>
 
   </div>
@@ -630,7 +672,8 @@ var FEATURES = [
   { name:"Day / night themes", desc:"Sun-moon toggle, auto by time of day." },
   { name:"Excel import", desc:"Paste rows straight from a spreadsheet." },
   { name:"PDF export", desc:"Printable monthly statement." },
-  { name:"Install to home screen", desc:"Use it like a native app, offline-friendly shell." }
+  { name:"Install to home screen", desc:"Use it like a native app, offline-friendly shell." },
+  { name:"Savings plans (coming soon)", desc:"Tailored saving plans based on your own spending patterns — in the works." }
 ];
 var DEFAULT_CATEGORIES = ["Groceries","Food & Dining","Transport","Utilities","Rent","Family","Friends","Healthcare","Shopping","Self Growth","Entertainment & Travel","Sadaqa","Miscellaneous"];
 var DEFAULT_INCOME_CATEGORIES = ["Income source 1","Income source 2"];
@@ -1011,7 +1054,7 @@ function populateCurrencySelects(){
 // ---- Landing buttons ----
 document.getElementById("goLoginBtn").addEventListener("click",function(){ clearAuthMessages(); showAuthPanel("loginWrap"); });
 document.getElementById("goSignupBtn").addEventListener("click",function(){ clearAuthMessages(); showAuthPanel("signupWrap"); });
-document.getElementById("goGuestBtn").addEventListener("click",function(){ clearAuthMessages(); showAuthPanel("guestWrap"); });
+document.getElementById("goGuestBtn").addEventListener("click",function(){ clearAuthMessages(); guestShowTab("returning"); showAuthPanel("guestWrap"); });
 document.getElementById("loginBackBtn").addEventListener("click",function(){ showAuthPanel("landingWrap"); });
 document.getElementById("signupBackBtn").addEventListener("click",function(){ showAuthPanel("landingWrap"); });
 document.getElementById("guestBackBtn").addEventListener("click",function(){ showAuthPanel("landingWrap"); });
@@ -1145,16 +1188,16 @@ document.getElementById("guestCreateBtn").addEventListener("click",function(){
 });
 
 // ---- Guest: returning login ----
-document.getElementById("guestTabNew").addEventListener("click",function(){
-  this.classList.add("active"); document.getElementById("guestTabReturning").classList.remove("active");
-  document.getElementById("guestNewPanel").style.display="block";
-  document.getElementById("guestReturningPanel").style.display="none";
-});
-document.getElementById("guestTabReturning").addEventListener("click",function(){
-  this.classList.add("active"); document.getElementById("guestTabNew").classList.remove("active");
-  document.getElementById("guestNewPanel").style.display="none";
-  document.getElementById("guestReturningPanel").style.display="block";
-});
+function guestShowTab(which){
+  var isNew = which==="new";
+  document.getElementById("guestTabNew").classList.toggle("active",isNew);
+  document.getElementById("guestTabReturning").classList.toggle("active",!isNew);
+  document.getElementById("guestNewPanel").style.display=isNew?"block":"none";
+  document.getElementById("guestReturningPanel").style.display=isNew?"none":"block";
+}
+document.getElementById("guestTabNew").addEventListener("click",function(){ guestShowTab("new"); });
+document.getElementById("guestTabReturning").addEventListener("click",function(){ guestShowTab("returning"); });
+document.getElementById("guestGoNewLink").addEventListener("click",function(){ guestShowTab("new"); });
 document.getElementById("guestLoginBtn").addEventListener("click",function(){
   var uname=document.getElementById("guestLoginUsername").value.trim().toLowerCase();
   var pin=document.getElementById("guestLoginPin").value.trim();
@@ -1529,8 +1572,8 @@ document.getElementById("undoToastBtn").addEventListener("click",function(){
 
 // ---- Settings ----
 var settingsOverlay=document.getElementById("settingsOverlay");
-var SETTINGS_PANELS = ["panelCategories","panelBudgets","panelPrefs","panelAccount","panelData","panelAbout"];
-var PANEL_TITLES = { panelCategories:"Categories", panelBudgets:"Budgets & caps", panelPrefs:"Preferences", panelAccount:"Account & security", panelData:"Data", panelAbout:"About & what's new" };
+var SETTINGS_PANELS = ["panelCategories","panelBudgets","panelPrefs","panelAccount","panelData","panelAbout","panelStory"];
+var PANEL_TITLES = { panelCategories:"Categories", panelBudgets:"Budgets & caps", panelPrefs:"Preferences", panelAccount:"Account & security", panelData:"Data", panelAbout:"About & what's new", panelStory:"The story & my mission" };
 function showSettingsMenu(){
   document.getElementById("settingsMenu").style.display="block";
   SETTINGS_PANELS.forEach(function(p){ document.getElementById(p).style.display="none"; });
@@ -1618,7 +1661,7 @@ function renderAbout(){
     return '<div class="whatsnew-item"><h5>'+escapeHtml(c.title)+'</h5><p>'+escapeHtml(c.body)+'</p></div>';
   }).join("");
   document.getElementById("featuresList").innerHTML=FEATURES.map(function(f){
-    return '<div class="feature-item"><b>'+escapeHtml(f.name)+'</b> — '+escapeHtml(f.desc)+'</div>';
+    return '<div class="feature-item"><b>'+escapeHtml(f.name)+'</b><span>'+escapeHtml(f.desc)+'</span></div>';
   }).join("");
 }
 
