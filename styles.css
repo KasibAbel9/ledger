@@ -164,6 +164,12 @@ body[data-theme="day"] .balance-row .label{color:#3A2A1E;}
 .streak-day .dot.today{border-color:var(--accent);border-width:2px;}
 .streak-day .dl{font-size:10px;color:var(--text-faint);font-weight:600;}
 .streak-day .dot.done + .dl{color:var(--accent);}
+.streak-day .dot.nospend{background:var(--sage);border-color:var(--sage);color:#0F1D16;}
+.streak-day .dot.nospend + .dl{color:var(--sage);}
+.nospend-btn{width:100%;margin-top:14px;background:transparent;border:1px dashed var(--border);color:var(--text-dim);border-radius:var(--radius-sm);padding:11px;font-size:12.5px;font-weight:600;}
+.nospend-btn:active{background:var(--surface-2);}
+.nospend-done{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-top:14px;font-size:12.5px;font-weight:600;color:var(--sage);}
+.nospend-done button{background:none;border:none;color:var(--text-faint);font-size:12.5px;font-weight:600;text-decoration:underline;padding:4px;}
 
 .section{padding:4px 20px 26px;}
 .section h2{font-size:14px;font-weight:700;color:var(--text);margin:0 0 14px;letter-spacing:0.1px;}

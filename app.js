@@ -6,9 +6,10 @@ var SUPABASE_KEY = "sb_publishable_3Bn5vHh4AXyTu2tehjyShg_ef6kwtH2";
 var GUEST_FN_URL = SUPABASE_URL + "/functions/v1/guest-signup";
 var GUEST_EMAIL_DOMAIN = "@guest.ledger.local";
 
-var APP_VERSION = "1.4.1";
+var APP_VERSION = "1.5.0";
 // Newest first. `v` is the version an item shipped in.
 var CHANGELOG = [
+  { v:"1.5.0", title:"No-spend days", body:"Spent nothing today? Tap \u201cDidn\u2019t spend anything today\u201d on the streak card and the day still counts. Your streak now tracks awareness, not spending." },
   { v:"1.4.1", title:"Back button & install prompt", body:"Your phone's back button now closes sheets and Settings panels instead of leaving the app. An install prompt also stays on the home screen until Ledger is added to your home screen." },
   { v:"1.4.0", title:"Notifications", body:"A bell icon with a notifications panel — get in-app alerts when you hit 50%, 80% or 100% of your overall budget or any category cap, plus month-end reminders and streak milestones." },
   { v:"1.3.0", title:"Streak tracker", body:"A daily-logging streak card on the home screen — current streak, your best-ever record, and a weekly day tracker to keep the habit going." },
@@ -48,6 +49,7 @@ var state = {
   budget:0,
   categoryBudgets:{},
   bestStreak:0,
+  noSpendDays:[],
   alertsSeen:{},
   currency:"EUR",
   profile:{ first:"", last:"" }
@@ -255,6 +257,7 @@ function loadCloudData(token, userId){
         state.budget = typeof d.budget==="number"?d.budget:0;
         state.categoryBudgets = (d.categoryBudgets && typeof d.categoryBudgets==="object")?d.categoryBudgets:{};
         state.bestStreak = typeof d.bestStreak==="number"?d.bestStreak:0;
+        state.noSpendDays = Array.isArray(d.noSpendDays)?d.noSpendDays:[];
         state.alertsSeen = (d.alertsSeen && typeof d.alertsSeen==="object")?d.alertsSeen:{};
         state.currency = (d.currency && CURRENCIES[d.currency])?d.currency:"EUR";
         state.profile = (d.profile && typeof d.profile==="object")?{first:d.profile.first||"",last:d.profile.last||""}:{first:"",last:""};
@@ -653,7 +656,7 @@ document.getElementById("recoverResetBtn").addEventListener("click", function(){
 });
 
 // ---- Sign out ----
-function freshState(){ return {transactions:[],categories:DEFAULT_CATEGORIES.slice(),incomeCategories:DEFAULT_INCOME_CATEGORIES.slice(),budget:0,categoryBudgets:{},bestStreak:0,alertsSeen:{},currency:"EUR",profile:{first:"",last:""}}; }
+function freshState(){ return {transactions:[],categories:DEFAULT_CATEGORIES.slice(),incomeCategories:DEFAULT_INCOME_CATEGORIES.slice(),budget:0,categoryBudgets:{},bestStreak:0,noSpendDays:[],alertsSeen:{},currency:"EUR",profile:{first:"",last:""}}; }
 document.getElementById("signOutBtn").addEventListener("click",function(){
   showConfirm("Sign out?","You'll need to sign in again on this device.",function(){
     if(saveTimer){ clearTimeout(saveTimer); saveTimer=null; } // cancel any pending save
@@ -689,8 +692,23 @@ function categoryTotals(mk){
   txForMonth(mk).filter(function(t){ return t.type==="expense"; }).forEach(function(t){ map[t.category]=(map[t.category]||0)+t.amount; });
   return Object.keys(map).map(function(k){ return{name:k,total:map[k]}; }).sort(function(a,b){ return b.total-a.total; });
 }
+// A day "counts" if something was logged OR it was marked a no-spend day.
+function isNoSpendDay(iso){ return (state.noSpendDays||[]).indexOf(iso)>-1; }
+function loggedOn(iso){ return state.transactions.some(function(t){ return t.date===iso; }); }
+function markNoSpendToday(){
+  var t=todayISO();
+  if(!state.noSpendDays) state.noSpendDays=[];
+  if(state.noSpendDays.indexOf(t)===-1) state.noSpendDays.push(t);
+  doSave(); render();
+}
+function unmarkNoSpendToday(){
+  var t=todayISO();
+  state.noSpendDays=(state.noSpendDays||[]).filter(function(d){ return d!==t; });
+  doSave(); render();
+}
 function currentStreak(){
   var ds={};state.transactions.forEach(function(t){ ds[t.date]=true; });
+  (state.noSpendDays||[]).forEach(function(d){ ds[d]=true; });
   var c=0,cursor=new Date();
   if(!ds[todayISO()]) cursor.setDate(cursor.getDate()-1);
   while(true){ var k=cursor.getFullYear()+"-"+pad(cursor.getMonth()+1)+"-"+pad(cursor.getDate()); if(ds[k]){c++;cursor.setDate(cursor.getDate()-1);}else break; }
@@ -741,9 +759,9 @@ function renderBudgetBlock(spent){
 }
 function renderNudge(){
   var slot=document.getElementById("nudgeSlot");
-  var loggedToday=state.transactions.some(function(t){ return t.date===todayISO(); });
+  var loggedToday=loggedOn(todayISO());
   var html="";
-  if(!loggedToday&&!nudgeDismissed){
+  if(!loggedToday&&!isNoSpendDay(todayISO())&&!nudgeDismissed){
     html='<div class="nudge"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><p>Nothing logged today yet.</p><div class="actions"><button class="log" id="nudgeLogBtn">Add</button><button class="dismiss" id="nudgeDismissBtn">×</button></div></div>';
   }
   slot.innerHTML=html;
@@ -764,36 +782,47 @@ function weekDays(){
   for(var i=0;i<7;i++){
     var d=new Date(monday); d.setDate(monday.getDate()+i);
     var iso=d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
-    out.push({ label:labels[i], iso:iso, done:!!logged[iso], isToday:(iso===todayISO()) });
+    out.push({ label:labels[i], iso:iso, done:!!logged[iso]||isNoSpendDay(iso), noSpend:(!logged[iso]&&isNoSpendDay(iso)), isToday:(iso===todayISO()) });
   }
   return out;
 }
 function renderStreakCard(){
   var slot=document.getElementById("streakSlot");
   if(!slot) return;
+  var today=todayISO();
   var streak=currentStreak();
   // keep best-streak record up to date (persists to cloud)
   if(streak > (state.bestStreak||0)){ state.bestStreak=streak; doSave(); }
   var best=state.bestStreak||0;
-  var loggedToday=state.transactions.some(function(t){ return t.date===todayISO(); });
+  var loggedToday=loggedOn(today);
+  var markedToday=isNoSpendDay(today);
 
   var msg;
-  if(streak===0){ msg="Log an expense today to start a streak. 🔥"; }
-  else if(!loggedToday){ msg="You're on a "+streak+"-day streak — log today to keep it alive!"; }
+  if(streak===0){ msg="Log an expense today to start a streak. \ud83d\udd25"; }
+  else if(!loggedToday&&!markedToday){ msg="You're on a "+streak+"-day streak \u2014 log today to keep it alive!"; }
+  else if(markedToday&&!loggedToday){ msg="No spending today \u2014 streak safe, and money saved. \ud83d\udcb0"; }
   else if(streak===1){ msg="Nice start! Come back tomorrow to build your streak."; }
-  else { msg="🔥 "+streak+" days strong. Keep the momentum going!"; }
+  else { msg="\ud83d\udd25 "+streak+" days strong. Keep the momentum going!"; }
 
   var week=weekDays();
   var weekHtml=week.map(function(dn){
-    var cls="dot"+(dn.done?" done":"")+(dn.isToday?" today":"");
-    var inner=dn.done?"✓":"";
+    var cls="dot"+(dn.done?" done":"")+(dn.noSpend?" nospend":"")+(dn.isToday?" today":"");
+    var inner=dn.done?(dn.noSpend?"\u2013":"\u2713"):"";
     return '<div class="streak-day"><div class="'+cls+'">'+inner+'</div><div class="dl">'+dn.label+'</div></div>';
   }).join("");
+
+  // Protect the streak on a day with genuinely nothing to log
+  var actionHtml="";
+  if(!loggedToday&&!markedToday){
+    actionHtml='<button class="nospend-btn" id="noSpendBtn">Didn\'t spend anything today</button>';
+  } else if(markedToday&&!loggedToday){
+    actionHtml='<div class="nospend-done"><span>\u2713 Marked as a no-spend day</span><button id="noSpendUndo">Undo</button></div>';
+  }
 
   slot.innerHTML=
     '<div class="streak-card">'+
       '<div class="streak-top">'+
-        '<div class="streak-flame'+(streak>0?" lit":"")+'">🔥</div>'+
+        '<div class="streak-flame'+(streak>0?" lit":"")+'">\ud83d\udd25</div>'+
         '<div class="streak-nums">'+
           '<div class="streak-count">'+streak+' <span>day'+(streak===1?"":"s")+'</span></div>'+
           '<div class="streak-best">Best streak: '+best+' day'+(best===1?"":"s")+'</div>'+
@@ -801,7 +830,13 @@ function renderStreakCard(){
       '</div>'+
       '<div class="streak-week">'+weekHtml+'</div>'+
       '<div class="streak-msg">'+escapeHtml(msg)+'</div>'+
+      actionHtml+
     '</div>';
+
+  var nb=document.getElementById("noSpendBtn");
+  if(nb) nb.addEventListener("click",markNoSpendToday);
+  var nu=document.getElementById("noSpendUndo");
+  if(nu) nu.addEventListener("click",unmarkNoSpendToday);
 }
 
 // ---- Notifications engine ----
