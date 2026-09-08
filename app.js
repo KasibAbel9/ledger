@@ -6,9 +6,10 @@ var SUPABASE_KEY = "sb_publishable_3Bn5vHh4AXyTu2tehjyShg_ef6kwtH2";
 var GUEST_FN_URL = SUPABASE_URL + "/functions/v1/guest-signup";
 var GUEST_EMAIL_DOMAIN = "@guest.ledger.local";
 
-var APP_VERSION = "1.5.3";
+var APP_VERSION = "1.5.4";
 // Newest first. `v` is the version an item shipped in.
 var CHANGELOG = [
+  { v:"1.5.4", title:"Status bar fix", body:"Fixed the status bar clashing with icon colour on some Android phones by matching it to your phone's own light/dark setting." },
   { v:"1.5.3", title:"Status bar matches the theme", body:"The strip at the top of your screen now follows day and night mode instead of staying green." },
   { v:"1.5.2", title:"Swipe sheets closed", body:"Drag down on any panel \u2014 Settings, Add entry, Notifications \u2014 to close it, the way the little handle always suggested. Swiping no longer reloads the page." },
   { v:"1.5.1", title:"Edit your name", body:"You can now change the name you signed up with under Settings \u2192 Account & security." },
@@ -100,9 +101,11 @@ function themeIconMarkup(t){
 // #FBF1E6 = day --bg, #10131E = night --bg.
 function applyThemeColor(t){
   var col = (t==="day") ? "#FBF1E6" : "#10131E";
-  var m = document.querySelector('meta[name="theme-color"]');
-  if(!m){ m=document.createElement("meta"); m.setAttribute("name","theme-color"); document.head.appendChild(m); }
-  m.setAttribute("content", col);
+  // Two tags exist (one per prefers-color-scheme); keep both pointed at the
+  // in-app theme's colour so the visible one always matches what's on screen.
+  document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){
+    m.setAttribute("content", col);
+  });
   var s = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
   if(s) s.setAttribute("content", t==="day" ? "default" : "black-translucent");
 }
