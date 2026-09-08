@@ -6,9 +6,10 @@ var SUPABASE_KEY = "sb_publishable_3Bn5vHh4AXyTu2tehjyShg_ef6kwtH2";
 var GUEST_FN_URL = SUPABASE_URL + "/functions/v1/guest-signup";
 var GUEST_EMAIL_DOMAIN = "@guest.ledger.local";
 
-var APP_VERSION = "1.5.2";
+var APP_VERSION = "1.5.3";
 // Newest first. `v` is the version an item shipped in.
 var CHANGELOG = [
+  { v:"1.5.3", title:"Status bar matches the theme", body:"The strip at the top of your screen now follows day and night mode instead of staying green." },
   { v:"1.5.2", title:"Swipe sheets closed", body:"Drag down on any panel \u2014 Settings, Add entry, Notifications \u2014 to close it, the way the little handle always suggested. Swiping no longer reloads the page." },
   { v:"1.5.1", title:"Edit your name", body:"You can now change the name you signed up with under Settings \u2192 Account & security." },
   { v:"1.5.0", title:"No-spend days", body:"Spent nothing today? Tap \u201cDidn\u2019t spend anything today\u201d on the streak card and the day still counts. Your streak now tracks awareness, not spending." },
@@ -95,9 +96,20 @@ function themeIconMarkup(t){
     ? '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>'
     : '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>';
 }
+// Status-bar / browser-chrome colour, matched to the app background.
+// #FBF1E6 = day --bg, #10131E = night --bg.
+function applyThemeColor(t){
+  var col = (t==="day") ? "#FBF1E6" : "#10131E";
+  var m = document.querySelector('meta[name="theme-color"]');
+  if(!m){ m=document.createElement("meta"); m.setAttribute("name","theme-color"); document.head.appendChild(m); }
+  m.setAttribute("content", col);
+  var s = document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]');
+  if(s) s.setAttribute("content", t==="day" ? "default" : "black-translucent");
+}
 function applyTheme(t){
   currentTheme = t;
   document.body.setAttribute("data-theme", t);
+  applyThemeColor(t);
   var icon = document.getElementById("themeIcon");
   if(icon) icon.innerHTML = themeIconMarkup(t);
   var aIcon = document.getElementById("authThemeIcon");
