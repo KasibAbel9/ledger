@@ -6,9 +6,10 @@ var SUPABASE_KEY = "sb_publishable_3Bn5vHh4AXyTu2tehjyShg_ef6kwtH2";
 var GUEST_FN_URL = SUPABASE_URL + "/functions/v1/guest-signup";
 var GUEST_EMAIL_DOMAIN = "@guest.ledger.local";
 
-var APP_VERSION = "1.5.4";
+var APP_VERSION = "1.6.0";
 // Newest first. `v` is the version an item shipped in.
 var CHANGELOG = [
+  { v:"1.6.0", title:"Bottom navigation", body:"Ledger now has a proper bottom bar: Home, Analysis, Accounts, and More. Settings moved from a pop-up sheet into its own More tab. Every tab keeps its own scroll position, and the back button returns you to Home first." },
   { v:"1.5.4", title:"Status bar fix", body:"Fixed the status bar clashing with icon colour on some Android phones by matching it to your phone's own light/dark setting." },
   { v:"1.5.3", title:"Status bar matches the theme", body:"The strip at the top of your screen now follows day and night mode instead of staying green." },
   { v:"1.5.2", title:"Swipe sheets closed", body:"Drag down on any panel \u2014 Settings, Add entry, Notifications \u2014 to close it, the way the little handle always suggested. Swiping no longer reloads the page." },
@@ -160,6 +161,40 @@ window.addEventListener("popstate",function(){
     var top=layerStack.pop();
     try{ top.close(); }catch(e){}
   }
+});
+
+// ---- Bottom-nav tabs ----
+// All four tab panels stay in the DOM at all times (never rebuilt), so
+// switching tabs is just a display toggle and each tab keeps its own
+// scroll position automatically.
+var TAB_IDS = { home:"app", analysis:"tabAnalysis", accounts:"tabAccounts", more:"tabMore" };
+var currentTab = "home";
+function paintTab(name){
+  Object.keys(TAB_IDS).forEach(function(t){
+    var el=document.getElementById(TAB_IDS[t]);
+    if(el) el.style.display = (t===name ? "block" : "none");
+  });
+  document.querySelectorAll(".nav-btn").forEach(function(b){
+    b.classList.toggle("active", b.getAttribute("data-tab")===name);
+  });
+  currentTab=name;
+}
+// User-initiated tab switch (nav-bar tap). Leaving Home pushes exactly one
+// history entry, so a single hardware back-press from anywhere else always
+// returns to Home first, rather than exiting the app.
+function goToTab(name){
+  if(name===currentTab) return;
+  if(currentTab==="home" && name!=="home"){
+    paintTab(name);
+    openLayer("tab",function(){ paintTab("home"); });
+  } else if(name==="home"){
+    if(!closeLayer("tab")) paintTab("home");
+  } else {
+    paintTab(name); // moving between two non-Home tabs — no history change
+  }
+}
+document.querySelectorAll(".nav-btn").forEach(function(b){
+  b.addEventListener("click",function(){ goToTab(b.getAttribute("data-tab")); });
 });
 // Android/Chrome fires this when the app is installable — capture it for our button
 window.addEventListener("beforeinstallprompt", function(e){
@@ -427,7 +462,7 @@ function showAuthPanel(id){
 }
 function showAuth(){
   document.getElementById("loadingScreen").style.display="none";
-  document.getElementById("app").style.display="none";
+  document.getElementById("appShell").style.display="none";
   document.getElementById("authScreen").style.display="flex";
   showAuthPanel("landingWrap");
   refreshInstallBanner();
@@ -435,7 +470,8 @@ function showAuth(){
 function showApp(mode){
   document.getElementById("loadingScreen").style.display="none";
   document.getElementById("authScreen").style.display="none";
-  document.getElementById("app").style.display="block";
+  document.getElementById("appShell").style.display="block";
+  document.getElementById("app").style.display="block"; // Home tab starts active
   var first = (state.profile && state.profile.first) ? state.profile.first : (currentUser.email.split("@")[0]);
   var av = document.getElementById("userAvatar");
   if(av) av.textContent = (first||"?").charAt(0).toUpperCase();
@@ -682,7 +718,7 @@ document.getElementById("signOutBtn").addEventListener("click",function(){
     currentUser=null;
     dataLoaded=false; // block saves until a real load happens again
     state=freshState();
-    closeSettings();
+    paintTab("home"); layerStack=[];
     showAuth();
   });
 });
@@ -766,13 +802,13 @@ function renderBudgetBlock(spent){
   var el=document.getElementById("budgetBlock");
   if(!state.budget){
     el.innerHTML='<div class="budget-cta"><span>No monthly budget set</span><button id="setBudgetInline">Set one</button></div>';
-    document.getElementById("setBudgetInline").addEventListener("click",openSettings);
+    document.getElementById("setBudgetInline").addEventListener("click",function(){ goToTab("more"); openSettingsPanel("panelBudgets"); });
     return;
   }
   var pct=Math.min(100,(spent/state.budget)*100);
   var color=pct>=100?"var(--brick)":pct>=70?"var(--accent)":"var(--sage)";
   el.innerHTML='<div class="budget-row"><span>'+fmt(spent)+' of '+fmt(state.budget)+'</span><button id="editBudgetInline">edit</button></div><div class="budget-bar-track"><div class="budget-bar-fill" style="width:'+pct+'%;background:'+color+';"></div></div>';
-  document.getElementById("editBudgetInline").addEventListener("click",openSettings);
+  document.getElementById("editBudgetInline").addEventListener("click",function(){ goToTab("more"); openSettingsPanel("panelBudgets"); });
 }
 function renderNudge(){
   var slot=document.getElementById("nudgeSlot");
@@ -1201,7 +1237,7 @@ document.getElementById("undoToastBtn").addEventListener("click",function(){
 });
 
 // ---- Settings ----
-var settingsOverlay=document.getElementById("settingsOverlay");
+// settingsOverlay no longer exists — Settings now lives inline in the More tab.
 var SETTINGS_PANELS = ["panelCategories","panelBudgets","panelPrefs","panelAccount","panelData","panelAbout","panelStory"];
 var PANEL_TITLES = { panelCategories:"Categories", panelBudgets:"Budgets & caps", panelPrefs:"Preferences", panelAccount:"Account & security", panelData:"Data", panelAbout:"About & what's new", panelStory:"The story & my mission" };
 function showSettingsMenu(){
@@ -1232,20 +1268,10 @@ function openSettingsPanel(id){
   if(id==="panelAbout"){ renderAbout(); }
   openLayer("settingsPanel",showSettingsMenu);
 }
-function openSettings(){
-  showSettingsMenu();
-  settingsOverlay.classList.add("open");
-  openLayer("settings",function(){ settingsOverlay.classList.remove("open"); });
-}
-function closeSettings(){
-  if(!closeLayer("settings")) settingsOverlay.classList.remove("open");
-}
-document.getElementById("settingsBtn").addEventListener("click",openSettings);
-document.getElementById("settingsClose").addEventListener("click",closeSettings);
+document.getElementById("settingsBtn").addEventListener("click",function(){ goToTab("more"); });
 document.getElementById("settingsBack").addEventListener("click",function(){
   if(!closeLayer("settingsPanel")) showSettingsMenu();
 });
-settingsOverlay.addEventListener("click",function(e){ if(e.target===settingsOverlay) closeSettings(); });
 Array.prototype.forEach.call(document.querySelectorAll(".settings-item[data-panel]"),function(btn){
   btn.addEventListener("click",function(){ openSettingsPanel(btn.getAttribute("data-panel")); });
 });
@@ -1339,7 +1365,7 @@ function renderWhatsNewCard(){
   document.getElementById("wnSee").addEventListener("click",function(){
     try{ localStorage.setItem("ledger_seen_version",APP_VERSION); }catch(e){}
     slot.innerHTML="";
-    openSettings(); openSettingsPanel("panelAbout");
+    goToTab("more"); openSettingsPanel("panelAbout");
   });
   document.getElementById("wnDismiss").addEventListener("click",function(){
     try{ localStorage.setItem("ledger_seen_version",APP_VERSION); }catch(e){}
@@ -1446,7 +1472,7 @@ document.getElementById("resetDataBtn").addEventListener("click",function(){
     var keepProfile=state.profile, keepCur=state.currency;
     state=freshState();
     state.profile=keepProfile; state.currency=keepCur; // keep who they are + currency
-    doSave(); render(); closeSettings();
+    doSave(); render(); goToTab("home");
   });
 });
 
@@ -1578,7 +1604,6 @@ function enableSheetDrag(overlayId, closeFn){
   sheet.addEventListener("touchcancel", endDrag);
 }
 enableSheetDrag("txOverlay", closeTxSheet);
-enableSheetDrag("settingsOverlay", closeSettings);
 enableSheetDrag("notifOverlay", closeNotif);
 
 // ---- Start ----

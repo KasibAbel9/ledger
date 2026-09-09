@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="styles.css?v=1.5.4">
+<link rel="stylesheet" href="styles.css?v=1.6.0">
 </head>
 <body>
 
@@ -137,7 +137,8 @@
 </div>
 
 <!-- Main app -->
-<div id="app">
+<div id="appShell">
+<div id="app" class="tab-panel">
   <div class="topbar">
     <div class="user-id">
       <div class="avatar" id="userAvatar">?</div>
@@ -198,19 +199,34 @@
   <div id="streakSlot"></div>
 
   <div class="section">
-    <h2>Top categories</h2>
-    <div class="insight-card">
-      <div class="donut-wrap" id="donutWrap"></div>
-      <div id="categoryList"></div>
-    </div>
-  </div>
-  <div class="section">
     <h2>Activity</h2>
     <div id="activityList"></div>
   </div>
   <div class="sync-bar" id="syncBar"></div>
 
   <button class="fab" id="fab">+</button>
+</div>
+
+<!-- Analysis tab -->
+<div id="tabAnalysis" class="tab-panel" style="display:none;">
+  <div class="tab-header"><h2>Analysis</h2></div>
+  <div class="section">
+    <h2>Top categories</h2>
+    <div class="insight-card">
+      <div class="donut-wrap" id="donutWrap"></div>
+      <div id="categoryList"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Accounts tab (placeholder — bank connections coming soon) -->
+<div id="tabAccounts" class="tab-panel" style="display:none;">
+  <div class="tab-header"><h2>Accounts</h2></div>
+  <div class="accounts-empty">
+    <div class="accounts-empty-icon">🏦</div>
+    <h3>Bank accounts, coming soon</h3>
+    <p>Connect a bank account to have your transactions logged automatically. This is on the roadmap — for now, keep logging manually below.</p>
+  </div>
 </div>
 
 <!-- Add/Edit Sheet -->
@@ -241,17 +257,15 @@
   </div>
 </div>
 
-<!-- Settings Sheet -->
-<div class="overlay" id="settingsOverlay">
-  <div class="sheet">
-    <div class="sheet-handle"></div>
+<!-- More tab: settings menu + sub-panels, always part of the shell now (no sheet) -->
+<div id="tabMore" class="tab-panel" style="display:none;">
 
     <!-- Settings header: back arrow (in sub-panels) + title -->
     <div class="settings-head">
       <button class="settings-back" id="settingsBack" style="display:none;" aria-label="Back">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
       </button>
-      <h3 id="settingsTitle" style="margin:0;">Settings</h3>
+      <h3 id="settingsTitle" style="margin:0;">More</h3>
     </div>
 
     <!-- MENU -->
@@ -264,9 +278,6 @@
       <button class="settings-item" data-panel="panelAbout"><span>About &amp; what's new</span><span class="chev">›</span></button>
       <button class="settings-item" data-panel="panelStory"><span>The story &amp; my mission</span><span class="chev">›</span></button>
       <button class="btn-danger" id="signOutBtn" style="margin-top:18px;">Sign out</button>
-      <div class="sheet-actions" style="margin-top:12px;">
-        <button class="btn-secondary" id="settingsClose" style="width:100%;">Close</button>
-      </div>
     </div>
 
     <!-- PANEL: Categories -->
@@ -391,8 +402,29 @@
       </div>
     </div>
 
-  </div>
 </div>
+
+<!-- Bottom navigation -->
+<nav class="bottom-nav" id="bottomNav">
+  <button class="nav-btn active" data-tab="home">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+    <span>Home</span>
+  </button>
+  <button class="nav-btn" data-tab="analysis">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+    <span>Analysis</span>
+  </button>
+  <button class="nav-btn" data-tab="accounts">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"/><path d="M4 10h16"/><path d="M12 3l9 7H3l9-7z"/><path d="M6 10v8M12 10v8M18 10v8"/></svg>
+    <span>Accounts</span>
+  </button>
+  <button class="nav-btn" data-tab="more">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
+    <span>More</span>
+  </button>
+</nav>
+
+</div><!-- /appShell -->
 
 <!-- Notifications -->
 <div class="overlay" id="notifOverlay">
@@ -425,6 +457,6 @@
 
 <div id="printArea"></div>
 
-<script src="app.js?v=1.5.4"></script>
+<script src="app.js?v=1.6.0"></script>
 </body>
 </html>
