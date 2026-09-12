@@ -6,9 +6,10 @@ var SUPABASE_KEY = "sb_publishable_3Bn5vHh4AXyTu2tehjyShg_ef6kwtH2";
 var GUEST_FN_URL = SUPABASE_URL + "/functions/v1/guest-signup";
 var GUEST_EMAIL_DOMAIN = "@guest.ledger.local";
 
-var APP_VERSION = "1.6.0";
+var APP_VERSION = "1.7.0";
 // Newest first. `v` is the version an item shipped in.
 var CHANGELOG = [
+  { v:"1.7.0", title:"Smoother everywhere", body:"Tabs, the More menu and buttons now transition instead of snapping. The Add-entry sheet no longer hides its \u201cSave & add another\u201d button behind the nav bar, the Analysis donut chart has clean separators between categories, and a couple of tight-margin screens under More got proper breathing room." },
   { v:"1.6.0", title:"Bottom navigation", body:"Ledger now has a proper bottom bar: Home, Analysis, Accounts, and More. Settings moved from a pop-up sheet into its own More tab. Every tab keeps its own scroll position, and the back button returns you to Home first." },
   { v:"1.5.4", title:"Status bar fix", body:"Fixed the status bar clashing with icon colour on some Android phones by matching it to your phone's own light/dark setting." },
   { v:"1.5.3", title:"Status bar matches the theme", body:"The strip at the top of your screen now follows day and night mode instead of staying green." },
@@ -172,7 +173,17 @@ var currentTab = "home";
 function paintTab(name){
   Object.keys(TAB_IDS).forEach(function(t){
     var el=document.getElementById(TAB_IDS[t]);
-    if(el) el.style.display = (t===name ? "block" : "none");
+    if(!el) return;
+    if(t===name){
+      el.style.display="block";
+      // restart the fade-in animation on the tab that just became visible
+      el.classList.remove("tab-anim");
+      void el.offsetWidth;
+      el.classList.add("tab-anim");
+    } else {
+      el.style.display="none";
+      el.classList.remove("tab-anim");
+    }
   });
   document.querySelectorAll(".nav-btn").forEach(function(b){
     b.classList.toggle("active", b.getAttribute("data-tab")===name);
@@ -1030,7 +1041,7 @@ document.getElementById("notifClearBtn").addEventListener("click",function(){
 function buildDonutSvg(segments,totalLabel,subLabel){
   var size=168,r=66,cx=size/2,cy=size/2,circ=2*Math.PI*r;
   var total=segments.reduce(function(s,x){ return s+x.value; },0);
-  var arcs="";
+  var arcs="", seps="";
   if(total<=0){
     arcs='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="var(--surface-2)" stroke-width="15"/>';
   } else {
@@ -1040,9 +1051,20 @@ function buildDonutSvg(segments,totalLabel,subLabel){
       arcs+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+seg.color+'" stroke-width="15" stroke-linecap="round" stroke-dasharray="'+len+' '+(circ-len)+'" stroke-dashoffset="'+(-offset)+'"/>';
       offset+=frac*circ;
     });
+    // Thin card-coloured separators drawn on top at each segment boundary —
+    // without these the rounded end-caps of adjacent arcs visually overlap
+    // and the colours run together.
+    if(segments.length>1){
+      var cum=0;
+      segments.forEach(function(seg){
+        var deg=(cum/total)*360;
+        seps+='<line x1="'+cx+'" y1="'+(cy-r-9)+'" x2="'+cx+'" y2="'+(cy-r+9)+'" stroke="var(--surface)" stroke-width="3" stroke-linecap="round" transform="rotate('+deg+' '+cx+' '+cy+')"/>';
+        cum+=seg.value;
+      });
+    }
   }
   return '<svg class="donut-svg" width="'+size+'" height="'+size+'" viewBox="0 0 '+size+' '+size+'">'+
-    '<g transform="rotate(-90 '+cx+' '+cy+')">'+arcs+'</g>'+
+    '<g transform="rotate(-90 '+cx+' '+cy+')">'+arcs+seps+'</g>'+
     '<text x="'+cx+'" y="'+(cy-4)+'" text-anchor="middle" class="donut-total">'+escapeHtml(totalLabel)+'</text>'+
     '<text x="'+cx+'" y="'+(cy+16)+'" text-anchor="middle" class="donut-sub">'+escapeHtml(subLabel)+'</text>'+
     '</svg>';
@@ -1241,14 +1263,28 @@ document.getElementById("undoToastBtn").addEventListener("click",function(){
 var SETTINGS_PANELS = ["panelCategories","panelBudgets","panelPrefs","panelAccount","panelData","panelAbout","panelStory"];
 var PANEL_TITLES = { panelCategories:"Categories", panelBudgets:"Budgets & caps", panelPrefs:"Preferences", panelAccount:"Account & security", panelData:"Data", panelAbout:"About & what's new", panelStory:"The story & my mission" };
 function showSettingsMenu(){
-  document.getElementById("settingsMenu").style.display="block";
+  var menu=document.getElementById("settingsMenu");
+  menu.style.display="block";
+  menu.classList.remove("panel-anim");
+  void menu.offsetWidth;
+  menu.classList.add("panel-anim");
   SETTINGS_PANELS.forEach(function(p){ document.getElementById(p).style.display="none"; });
   document.getElementById("settingsBack").style.display="none";
   document.getElementById("settingsTitle").textContent="Settings";
 }
 function openSettingsPanel(id){
   document.getElementById("settingsMenu").style.display="none";
-  SETTINGS_PANELS.forEach(function(p){ document.getElementById(p).style.display=(p===id?"block":"none"); });
+  SETTINGS_PANELS.forEach(function(p){
+    var el=document.getElementById(p);
+    if(p===id){
+      el.style.display="block";
+      el.classList.remove("panel-anim");
+      void el.offsetWidth;
+      el.classList.add("panel-anim");
+    } else {
+      el.style.display="none";
+    }
+  });
   document.getElementById("settingsBack").style.display="flex";
   document.getElementById("settingsTitle").textContent=PANEL_TITLES[id]||"Settings";
   // lazy-fill each panel's dynamic content when opened
