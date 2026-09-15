@@ -6,9 +6,10 @@ var SUPABASE_KEY = "sb_publishable_3Bn5vHh4AXyTu2tehjyShg_ef6kwtH2";
 var GUEST_FN_URL = SUPABASE_URL + "/functions/v1/guest-signup";
 var GUEST_EMAIL_DOMAIN = "@guest.ledger.local";
 
-var APP_VERSION = "1.7.0";
+var APP_VERSION = "1.7.1";
 // Newest first. `v` is the version an item shipped in.
 var CHANGELOG = [
+  { v:"1.7.1", title:"Donut separators fixed", body:"The thin separators between categories on the Analysis donut chart were rotated 90\u00b0 off from the actual colour boundaries. They now sit exactly where each category starts and ends." },
   { v:"1.7.0", title:"Smoother everywhere", body:"Tabs, the More menu and buttons now transition instead of snapping. The Add-entry sheet no longer hides its \u201cSave & add another\u201d button behind the nav bar, the Analysis donut chart has clean separators between categories, and a couple of tight-margin screens under More got proper breathing room." },
   { v:"1.6.0", title:"Bottom navigation", body:"Ledger now has a proper bottom bar: Home, Analysis, Accounts, and More. Settings moved from a pop-up sheet into its own More tab. Every tab keeps its own scroll position, and the back button returns you to Home first." },
   { v:"1.5.4", title:"Status bar fix", body:"Fixed the status bar clashing with icon colour on some Android phones by matching it to your phone's own light/dark setting." },
@@ -1058,7 +1059,7 @@ function buildDonutSvg(segments,totalLabel,subLabel){
       var cum=0;
       segments.forEach(function(seg){
         var deg=(cum/total)*360;
-        seps+='<line x1="'+cx+'" y1="'+(cy-r-9)+'" x2="'+cx+'" y2="'+(cy-r+9)+'" stroke="var(--surface)" stroke-width="3" stroke-linecap="round" transform="rotate('+deg+' '+cx+' '+cy+')"/>';
+        seps+='<line x1="'+(cx+r-9)+'" y1="'+cy+'" x2="'+(cx+r+9)+'" y2="'+cy+'" stroke="var(--surface)" stroke-width="3" stroke-linecap="round" transform="rotate('+deg+' '+cx+' '+cy+')"/>';
         cum+=seg.value;
       });
     }
