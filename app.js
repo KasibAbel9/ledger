@@ -6,9 +6,10 @@ var SUPABASE_KEY = "sb_publishable_3Bn5vHh4AXyTu2tehjyShg_ef6kwtH2";
 var GUEST_FN_URL = SUPABASE_URL + "/functions/v1/guest-signup";
 var GUEST_EMAIL_DOMAIN = "@guest.ledger.local";
 
-var APP_VERSION = "1.7.1";
+var APP_VERSION = "1.7.2";
 // Newest first. `v` is the version an item shipped in.
 var CHANGELOG = [
+  { v:"1.7.2", title:"Crisp donut edges", body:"Category segments on the Analysis donut now end in a flat, straight edge instead of a rounded cap, so colours line up cleanly against the separators instead of bulging past them." },
   { v:"1.7.1", title:"Donut separators fixed", body:"The thin separators between categories on the Analysis donut chart were rotated 90\u00b0 off from the actual colour boundaries. They now sit exactly where each category starts and ends." },
   { v:"1.7.0", title:"Smoother everywhere", body:"Tabs, the More menu and buttons now transition instead of snapping. The Add-entry sheet no longer hides its \u201cSave & add another\u201d button behind the nav bar, the Analysis donut chart has clean separators between categories, and a couple of tight-margin screens under More got proper breathing room." },
   { v:"1.6.0", title:"Bottom navigation", body:"Ledger now has a proper bottom bar: Home, Analysis, Accounts, and More. Settings moved from a pop-up sheet into its own More tab. Every tab keeps its own scroll position, and the back button returns you to Home first." },
@@ -1048,8 +1049,8 @@ function buildDonutSvg(segments,totalLabel,subLabel){
   } else {
     var offset=0;
     segments.forEach(function(seg){
-      var frac=seg.value/total, len=Math.max(frac*circ-2,0);
-      arcs+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+seg.color+'" stroke-width="15" stroke-linecap="round" stroke-dasharray="'+len+' '+(circ-len)+'" stroke-dashoffset="'+(-offset)+'"/>';
+      var frac=seg.value/total, len=frac*circ;
+      arcs+='<circle cx="'+cx+'" cy="'+cy+'" r="'+r+'" fill="none" stroke="'+seg.color+'" stroke-width="15" stroke-linecap="butt" stroke-dasharray="'+len+' '+(circ-len)+'" stroke-dashoffset="'+(-offset)+'"/>';
       offset+=frac*circ;
     });
     // Thin card-coloured separators drawn on top at each segment boundary —
