@@ -6,9 +6,10 @@ var SUPABASE_KEY = "sb_publishable_3Bn5vHh4AXyTu2tehjyShg_ef6kwtH2";
 var GUEST_FN_URL = SUPABASE_URL + "/functions/v1/guest-signup";
 var GUEST_EMAIL_DOMAIN = "@guest.ledger.local";
 
-var APP_VERSION = "1.8.0";
+var APP_VERSION = "1.8.1";
 // Newest first. `v` is the version an item shipped in.
 var CHANGELOG = [
+  { v:"1.8.1", title:"Expenses and subscriptions are linked", body:"Add entry has a new Repeat option (Monthly, Quarterly, Yearly). Pick the Subscriptions category and it switches to Monthly on its own: saving logs today\u2019s payment and adds the subscription. The other way round, adding a subscription can also add the payment you\u2019ve already made this cycle, so it shows up in your expenses straight away." },
   { v:"1.8.0", title:"Subscriptions", body:"The Accounts tab is now Subscriptions. Add Netflix, your gym, rent — anything that repeats monthly, quarterly or yearly. On the payment date Ledger adds it to your expenses automatically, and the bell reminds you a few days before (you choose how many). Sort by date or price, filter by category or payment method, and pause anything you're not using." },
   { v:"1.8.0", title:"Budgets page fixed", body:"The Budgets & caps page no longer runs off the left edge of the screen on phones." },
   { v:"1.7.2", title:"Crisp donut edges", body:"Category segments on the Analysis donut now end in a flat, straight edge instead of a rounded cap, so colours line up cleanly against the separators instead of bulging past them." },
@@ -165,11 +166,15 @@ function closeLayer(id){
   }
   return false;
 }
+// history.go() is async: opening a new layer right after closing one would get
+// undone by the still-pending back step. Work that must follow a close waits here.
+var pendingAfterPop=null;
 window.addEventListener("popstate",function(){
   if(layerStack.length){
     var top=layerStack.pop();
     try{ top.close(); }catch(e){}
   }
+  if(pendingAfterPop){ var fn=pendingAfterPop; pendingAfterPop=null; fn(); }
 });
 
 // ---- Bottom-nav tabs ----
@@ -1173,6 +1178,8 @@ function populateCategorySelect(sel){
 }
 function openTxSheet(tx){
   editingId=tx?tx.id:null;
+  txRepeatTouched=false;
+  document.getElementById("txDescErr").classList.remove("show");
   document.getElementById("txSheetTitle").textContent=tx?"Edit entry":"Add entry";
   document.getElementById("txDelete").style.display=tx?"block":"none";
   document.getElementById("txSaveAnother").style.display=tx?"none":"block";
@@ -1190,23 +1197,87 @@ function openTxSheet(tx){
   document.getElementById("txAmount").value=tx?tx.amount:"";
   document.getElementById("txDesc").value=tx?(tx.description||""):"";
   document.getElementById("txDate").value=tx?tx.date:(lastUsed.date||todayISO());
+  setTxRepeat("none",false);
+  refreshRepeatUI(tx);
+  applyRepeatDefault();
   txOverlay.classList.add("open");
   openLayer("tx",function(){ txOverlay.classList.remove("open"); editingId=null; });
   setTimeout(function(){ document.getElementById("txAmount").focus(); },300);
 }
 function closeTxSheet(){ if(!closeLayer("tx")){ txOverlay.classList.remove("open"); editingId=null; } }
+function editingTx(){ return editingId ? state.transactions.find(function(x){ return x.id===editingId; }) : null; }
+
+// ---- Repeat: turn an expense into a subscription ----
+var txRepeat="none", txRepeatTouched=false;
+function setTxRepeat(r,touched){
+  txRepeat=CYCLE_MONTHS[r]?r:"none";
+  if(touched) txRepeatTouched=true;
+  Array.prototype.forEach.call(document.querySelectorAll("#txRepeatToggle button"),function(b){
+    b.classList.toggle("active", b.getAttribute("data-repeat")===txRepeat);
+  });
+  updateRepeatHint();
+}
+function updateRepeatHint(){
+  var hint=document.getElementById("txRepeatHint");
+  if(txRepeat==="none" || document.getElementById("txRepeatField").style.display==="none"){ hint.style.display="none"; return; }
+  var date=document.getElementById("txDate").value||todayISO();
+  var next=addMonthsAnchored(date, CYCLE_MONTHS[txRepeat], parseISO(date).getDate());
+  var every={ monthly:"every month", quarterly:"every 3 months", yearly:"every year" }[txRepeat];
+  hint.textContent="Saves this payment and adds it to Subscriptions. Next payment "+fullDate(next)+", then "+every+", added to your expenses automatically.";
+  hint.style.display="block";
+}
+// New entries in the Subscriptions category default to Monthly, unless the user picked something themselves
+function applyRepeatDefault(){
+  if(txRepeatTouched || editingId) return;
+  if(document.getElementById("txRepeatField").style.display==="none") return;
+  setTxRepeat(document.getElementById("txCategory").value===SUB_CATEGORY ? "monthly" : "none", false);
+}
+// Entries that already belong to a subscription show that link instead of the Repeat control
+function refreshRepeatUI(tx){
+  var linkedToSub = !!(tx && tx.subId);
+  var sub = linkedToSub ? (state.subscriptions||[]).find(function(s){ return s.id===tx.subId; }) : null;
+  var showRepeat = currentType==="expense" && !linkedToSub;
+  document.getElementById("txRepeatField").style.display=showRepeat?"block":"none";
+  var box=document.getElementById("txLinkedSub");
+  box.style.display=linkedToSub?"flex":"none";
+  if(linkedToSub){
+    document.getElementById("txLinkedText").innerHTML = sub
+      ? "\u21bb Part of your <b>"+escapeHtml(sub.name)+"</b> subscription. Changing this entry doesn't change the subscription."
+      : "\u21bb Added by a subscription that has since been deleted.";
+    document.getElementById("txLinkedOpen").style.display=sub?"inline":"none";
+  }
+  if(!showRepeat) setTxRepeat("none",false);
+  updateRepeatHint();
+}
+Array.prototype.forEach.call(document.querySelectorAll("#txRepeatToggle button"),function(b){
+  b.addEventListener("click",function(){ setTxRepeat(b.getAttribute("data-repeat"),true); });
+});
+document.getElementById("txDate").addEventListener("change",updateRepeatHint);
+document.getElementById("txDate").addEventListener("input",updateRepeatHint);
+document.getElementById("txDesc").addEventListener("input",function(){ document.getElementById("txDescErr").classList.remove("show"); });
+document.getElementById("txLinkedOpen").addEventListener("click",function(){
+  var tx=editingTx(); if(!tx) return;
+  var sub=(state.subscriptions||[]).find(function(s){ return s.id===tx.subId; });
+  if(!sub) return;
+  function go(){ goToTab("subs"); openSubSheet(sub); }
+  if(closeLayer("tx")) pendingAfterPop=go;
+  else { txOverlay.classList.remove("open"); editingId=null; go(); }
+});
 function setTypeButtons(type){
   currentType=type;
   document.getElementById("typeExpenseBtn").classList.toggle("active",type==="expense");
   document.getElementById("typeIncomeBtn").classList.toggle("active",type==="income");
   document.getElementById("newCatField").style.display="none";
   populateCategorySelect(activeCatList()[0]);
+  refreshRepeatUI(editingTx());
+  applyRepeatDefault();
 }
 document.getElementById("typeExpenseBtn").addEventListener("click",function(){ setTypeButtons("expense"); });
 document.getElementById("typeIncomeBtn").addEventListener("click",function(){ setTypeButtons("income"); });
 document.getElementById("txCategory").addEventListener("change",function(){
   document.getElementById("newCatField").style.display=this.value==="__new__"?"flex":"none";
   if(this.value==="__new__") document.getElementById("newCatInput").focus();
+  applyRepeatDefault();
 });
 document.getElementById("newCatAdd").addEventListener("click",function(){
   var name=document.getElementById("newCatInput").value.trim();
@@ -1230,12 +1301,18 @@ function commitTx(){
   var category=catVal==="__new__"?activeCatList()[0]:catVal;
   var desc=document.getElementById("txDesc").value.trim();
   var date=document.getElementById("txDate").value||todayISO();
+  var repeat=(currentType==="expense" && document.getElementById("txRepeatField").style.display!=="none") ? txRepeat : "none";
+  if(repeat!=="none" && !desc){ document.getElementById("txDescErr").classList.add("show"); return false; }
+  var entry=null;
   if(editingId){
     var t=state.transactions.find(function(x){ return x.id===editingId; });
-    if(t){t.type=currentType;t.amount=amount;t.category=category;t.description=desc;t.date=date;}
+    if(t){t.type=currentType;t.amount=amount;t.category=category;t.description=desc;t.date=date;entry=t;}
   } else {
-    state.transactions.push({id:uid(),type:currentType,amount:amount,category:category,description:desc,date:date,_order:Date.now()});
+    entry={id:uid(),type:currentType,amount:amount,category:category,description:desc,date:date,_order:Date.now()};
+    state.transactions.push(entry);
   }
+  // "Repeat" chosen: this entry is the payment just made, a linked subscription takes it from here
+  if(entry && repeat!=="none" && !entry.subId) createSubFromEntry(entry,repeat);
   // remember choices to speed up the next entry
   lastUsed.type=currentType; lastUsed.category=category; lastUsed.date=date;
   doSave();
@@ -1251,6 +1328,7 @@ document.getElementById("txSaveAnother").addEventListener("click",function(){
   editingId=null;
   document.getElementById("txAmount").value="";
   document.getElementById("txDesc").value="";
+  txRepeatTouched=false; setTxRepeat("none",false); refreshRepeatUI(null); applyRepeatDefault();
   document.getElementById("txAmount").focus();
   // brief confirmation flash on the button
   var b=document.getElementById("txSaveAnother"); var old=b.textContent;
@@ -1302,6 +1380,46 @@ function parseISO(s){ var p=String(s).split("-").map(Number); return new Date(p[
 function toISO(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
 function daysUntil(iso){ return Math.round((parseISO(iso)-parseISO(todayISO()))/86400000); }
 function shortDate(iso){ var d=parseISO(iso); return d.getDate()+" "+MONTH_NAMES[d.getMonth()].slice(0,3); }
+function fullDate(iso){ var d=parseISO(iso); return shortDate(iso)+(d.getFullYear()!==new Date().getFullYear()?" "+d.getFullYear():""); }
+function daysBetween(a,b){ return Math.round((parseISO(b)-parseISO(a))/86400000); }
+function nextSubColor(){
+  var used=(state.subscriptions||[]).map(function(s){ return s.color; });
+  return SUB_COLORS.find(function(c){ return used.indexOf(c)===-1; }) || SUB_COLORS[(state.subscriptions||[]).length%SUB_COLORS.length];
+}
+// The payment one cycle before `nextIso` (e.g. next 27 Oct monthly -> 27 Sep)
+function prevCycleDate(nextIso,cycle,anchor){ return addMonthsAnchored(nextIso,-(CYCLE_MONTHS[cycle]||1),anchor||parseISO(nextIso).getDate()); }
+
+// Add entry -> "Repeat": the entry is the payment just made; a linked subscription
+// takes over from the next cycle.
+function createSubFromEntry(entry,cycle){
+  if(!Array.isArray(state.subscriptions)) state.subscriptions=[];
+  var anchor=parseISO(entry.date).getDate();
+  var sub={ id:uid(), name:String(entry.description||entry.category).slice(0,40), amount:entry.amount, cycle:cycle,
+    nextDate:addMonthsAnchored(entry.date,CYCLE_MONTHS[cycle]||1,anchor), anchorDay:anchor,
+    category:entry.category||SUB_CATEGORY, payMethod:"", remindDays:1, color:nextSubColor(),
+    active:true, createdAt:todayISO(), lastLogged:entry.date };
+  state.subscriptions.push(sub);
+  entry.subId=sub.id;
+  processSubscriptions(); // an entry dated more than one cycle back catches up to today
+  return sub;
+}
+// Subscription sheet -> "Already paid": log the payment one cycle before the next one.
+// If the user already logged that payment by hand, link their entry instead of duplicating it.
+function logPreviousPayment(sub,prev){
+  var nameLc=String(sub.name).toLowerCase();
+  var match=state.transactions.find(function(t){
+    if(t.type!=="expense" || t.subId || Math.abs(t.amount-sub.amount)>=0.005) return false;
+    if(Math.abs(daysBetween(t.date,prev))>3) return false;
+    var d=String(t.description||"").toLowerCase().trim();
+    return t.category===sub.category || (d && (d.indexOf(nameLc)>-1 || nameLc.indexOf(d)>-1));
+  });
+  if(match) match.subId=sub.id;
+  else state.transactions.push({ id:uid(), type:"expense", amount:sub.amount, category:sub.category||SUB_CATEGORY,
+    description:sub.name, date:prev, _order:Date.now(), subId:sub.id });
+  sub.lastLogged=prev;
+  delete sub.loggedOn; // the user asked for this one, no "logged" note in the bell
+  return !!match;
+}
 // Step a date forward n months, keeping the original day of month where it exists:
 // a subscription started on the 31st bills on the 30th in 30-day months, then the 31st again.
 function addMonthsAnchored(iso,n,anchor){
@@ -1367,7 +1485,7 @@ function subAlerts(){
         title:sub.name+(d===1?" renews tomorrow":" renews in "+d+" days"),
         body:fmt(sub.amount)+" will be added to your expenses on "+shortDate(sub.nextDate)+"." });
     }
-    if(sub.lastLogged && daysUntil(sub.loggedOn||sub.lastLogged)>=-1){
+    if(sub.lastLogged && sub.loggedOn && daysUntil(sub.loggedOn)>=-1){
       out.push({ id:"sublog:"+sub.id+":"+sub.lastLogged, sev:"info", icon:"↻",
         title:sub.name+" logged",
         body:fmt(sub.amount)+" was added to your expenses for "+shortDate(sub.lastLogged)+"." });
@@ -1502,6 +1620,7 @@ function setSubCycle(c){
   Array.prototype.forEach.call(document.querySelectorAll("#subCycleToggle button"),function(b){
     b.classList.toggle("active", b.getAttribute("data-cycle")===subFormCycle);
   });
+  if(document.getElementById("subOverlay").classList.contains("open")) updateSubPaidRow();
 }
 function setSubActive(on){
   subFormActive=!!on;
@@ -1546,13 +1665,11 @@ function openSubSheet(sub){
   (state.subscriptions||[]).forEach(function(s){ if(s.payMethod && methods.indexOf(s.payMethod)===-1) methods.push(s.payMethod); });
   document.getElementById("subPayList").innerHTML=methods.map(function(m){ return '<option value="'+escapeHtml(m)+'">'; }).join("");
   document.getElementById("subRemind").value=String(sub?(Number(sub.remindDays)||0):1);
-  if(sub){ subFormColor=safeColor(sub.color); }
-  else {
-    var used=(state.subscriptions||[]).map(function(s){ return s.color; });
-    subFormColor=SUB_COLORS.find(function(c){ return used.indexOf(c)===-1; }) || SUB_COLORS[(state.subscriptions||[]).length%SUB_COLORS.length];
-  }
+  subFormColor=sub?safeColor(sub.color):nextSubColor();
   renderSwatches();
   setSubActive(sub?sub.active:true);
+  setSubPaid(!sub); // new: on by default; editing a never-charged one: off until switched on
+  updateSubPaidRow();
   openOverlayLayer("subOverlay","sub",function(){ editingSubId=null; });
   if(!sub) setTimeout(function(){ document.getElementById("subName").focus(); },300);
 }
@@ -1580,24 +1697,61 @@ function saveSubFromSheet(){
   };
   // Chosen category must exist so it shows up in pickers, Analysis and caps
   if(state.categories.indexOf(fields.category)===-1) state.categories.push(fields.category);
+  var paidPrev=subPaidPrevDate(); // null unless "Already paid" is shown and switched on
+  var target;
   if(editingSubId){
-    var sub=(state.subscriptions||[]).find(function(x){ return x.id===editingSubId; });
-    if(!sub){ closeSubSheet(); return; }
-    Object.keys(fields).forEach(function(k){ sub[k]=fields[k]; });
-    if(date!==subFormOrigDate) sub.anchorDay=parseISO(date).getDate(); // user picked a new billing day
-    sub.nextDate=date;
+    target=(state.subscriptions||[]).find(function(x){ return x.id===editingSubId; });
+    if(!target){ closeSubSheet(); return; }
+    Object.keys(fields).forEach(function(k){ target[k]=fields[k]; });
+    if(date!==subFormOrigDate) target.anchorDay=parseISO(date).getDate(); // user picked a new billing day
+    target.nextDate=date;
   } else {
     if(!Array.isArray(state.subscriptions)) state.subscriptions=[];
-    fields.id=uid();
-    fields.nextDate=date;
-    fields.anchorDay=parseISO(date).getDate();
-    fields.createdAt=todayISO();
-    state.subscriptions.push(fields);
+    target=fields;
+    target.id=uid();
+    target.nextDate=date;
+    target.anchorDay=parseISO(date).getDate();
+    target.createdAt=todayISO();
+    state.subscriptions.push(target);
   }
+  if(paidPrev && subFormPaid) logPreviousPayment(target,paidPrev);
   processSubscriptions(); // a payment dated today is logged straight away
   doSave(); render();
   closeSubSheet();
 }
+// "Already paid this cycle": offered when the next payment is in the future, the
+// payment before it has already happened, and this subscription has never logged anything.
+var subFormPaid=true;
+function setSubPaid(on){
+  subFormPaid=!!on;
+  var sw=document.getElementById("subPaidSwitch");
+  sw.classList.toggle("on",subFormPaid);
+  sw.setAttribute("aria-pressed",subFormPaid?"true":"false");
+}
+function subPaidPrevDate(){
+  var sub=editingSubId?(state.subscriptions||[]).find(function(x){ return x.id===editingSubId; }):null;
+  if(sub && sub.lastLogged) return null;
+  var date=document.getElementById("subDate").value, today=todayISO();
+  if(!date || date<=today) return null;
+  var anchor=(sub && date===subFormOrigDate) ? sub.anchorDay : parseISO(date).getDate();
+  var prev=prevCycleDate(date,subFormCycle,anchor);
+  return prev<=today ? prev : null;
+}
+function updateSubPaidRow(){
+  var row=document.getElementById("subPaidRow");
+  var prev=subPaidPrevDate();
+  if(!prev){ row.style.display="none"; return; }
+  var amount=parseFloat(document.getElementById("subAmount").value);
+  document.getElementById("subPaidText").textContent="Adds "+(isNaN(amount)||amount<=0?"this payment":fmt(amount))+
+    " to your expenses for "+fullDate(prev)+". Leave it off if you haven't paid yet.";
+  row.style.display="flex";
+}
+document.getElementById("subPaidSwitch").addEventListener("click",function(){ setSubPaid(!subFormPaid); });
+["subDate","subAmount"].forEach(function(id){
+  document.getElementById(id).addEventListener("input",updateSubPaidRow);
+  document.getElementById(id).addEventListener("change",updateSubPaidRow);
+});
+
 // Clear each validation message as soon as its field is fixed
 [["subName","subNameErr"],["subAmount","subAmountErr"],["subDate","subDateErr"]].forEach(function(pair){
   function clear(){ document.getElementById(pair[1]).classList.remove("show"); }

@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="styles.css?v=1.8.0">
+<link rel="stylesheet" href="styles.css?v=1.8.1">
 </head>
 <body>
 
@@ -253,7 +253,21 @@
     </div>
     <p class="cat-note">Existing categories can be edited or removed under Settings.</p>
     <div class="field"><label>Description</label><input type="text" id="txDesc" placeholder="e.g. Edeka, rent, sim.de"></div>
+    <div class="err" id="txDescErr">Add a description (e.g. Netflix). It becomes the subscription's name.</div>
     <div class="field"><label>Date</label><input type="date" id="txDate"></div>
+    <div class="field" id="txRepeatField"><label>Repeat</label>
+      <div class="type-toggle compact" id="txRepeatToggle" style="margin-bottom:0;">
+        <button type="button" data-repeat="none" class="active">No</button>
+        <button type="button" data-repeat="monthly">Monthly</button>
+        <button type="button" data-repeat="quarterly">Quarterly</button>
+        <button type="button" data-repeat="yearly">Yearly</button>
+      </div>
+    </div>
+    <p class="field-hint" id="txRepeatHint" style="display:none;"></p>
+    <div class="linked-sub" id="txLinkedSub" style="display:none;">
+      <span id="txLinkedText"></span>
+      <button type="button" class="inline-link" id="txLinkedOpen">Open subscription</button>
+    </div>
     <div class="sheet-actions">
       <button class="btn-secondary" id="txCancel">Cancel</button>
       <button class="btn-primary" id="txSave">Save</button>
@@ -282,6 +296,10 @@
     <div class="field"><label>Next payment date</label><input type="date" id="subDate"></div>
     <div class="err" id="subDateErr">Pick today or a date in the future.</div>
     <p class="field-hint">On this date the amount is added to your expenses automatically, then it moves on to the next cycle. If it's today, today's payment is added as soon as you save.</p>
+    <div class="switch-row" id="subPaidRow" style="display:none;">
+      <div class="sw-txt"><b>Already paid this cycle</b><span id="subPaidText"></span></div>
+      <button type="button" class="switch on" id="subPaidSwitch" aria-label="Already paid this cycle" aria-pressed="true"></button>
+    </div>
     <div class="field"><label>Category</label><select id="subCategory"></select></div>
     <div class="field"><label>Payment method (optional)</label><input type="text" id="subPayMethod" list="subPayList" maxlength="30" autocomplete="off" placeholder="e.g. Wise, Visa, PayPal"><datalist id="subPayList"></datalist></div>
     <div class="field"><label>Remind me</label>
@@ -530,6 +548,6 @@
 
 <div id="printArea"></div>
 
-<script src="app.js?v=1.8.0"></script>
+<script src="app.js?v=1.8.1"></script>
 </body>
 </html>
