@@ -6,9 +6,11 @@ var SUPABASE_KEY = "sb_publishable_3Bn5vHh4AXyTu2tehjyShg_ef6kwtH2";
 var GUEST_FN_URL = SUPABASE_URL + "/functions/v1/guest-signup";
 var GUEST_EMAIL_DOMAIN = "@guest.ledger.local";
 
-var APP_VERSION = "1.7.2";
+var APP_VERSION = "1.8.0";
 // Newest first. `v` is the version an item shipped in.
 var CHANGELOG = [
+  { v:"1.8.0", title:"Subscriptions", body:"The Accounts tab is now Subscriptions. Add Netflix, your gym, rent — anything that repeats monthly, quarterly or yearly. On the payment date Ledger adds it to your expenses automatically, and the bell reminds you a few days before (you choose how many). Sort by date or price, filter by category or payment method, and pause anything you're not using." },
+  { v:"1.8.0", title:"Budgets page fixed", body:"The Budgets & caps page no longer runs off the left edge of the screen on phones." },
   { v:"1.7.2", title:"Crisp donut edges", body:"Category segments on the Analysis donut now end in a flat, straight edge instead of a rounded cap, so colours line up cleanly against the separators instead of bulging past them." },
   { v:"1.7.1", title:"Donut separators fixed", body:"The thin separators between categories on the Analysis donut chart were rotated 90\u00b0 off from the actual colour boundaries. They now sit exactly where each category starts and ends." },
   { v:"1.7.0", title:"Smoother everywhere", body:"Tabs, the More menu and buttons now transition instead of snapping. The Add-entry sheet no longer hides its \u201cSave & add another\u201d button behind the nav bar, the Analysis donut chart has clean separators between categories, and a couple of tight-margin screens under More got proper breathing room." },
@@ -30,6 +32,7 @@ var CHANGELOG = [
 var FEATURES = [
   { name:"Track expenses & income", desc:"Log entries by category and see monthly totals." },
   { name:"Monthly budget", desc:"Set a budget and watch ‘Left this month’ update." },
+  { name:"Subscriptions", desc:"Recurring payments logged automatically on their date, with reminders before each charge." },
   { name:"Category caps", desc:"Optional per-category spending limits." },
   { name:"Quick / Guest login", desc:"Username + PIN, no email needed." },
   { name:"Multi-currency", desc:"EUR, USD, INR, AED." },
@@ -39,7 +42,8 @@ var FEATURES = [
   { name:"Install to home screen", desc:"Use it like a native app, offline-friendly shell." },
   { name:"Savings plans (coming soon)", desc:"Tailored saving plans based on your own spending patterns — in the works." }
 ];
-var DEFAULT_CATEGORIES = ["Groceries","Food & Dining","Transport","Utilities","Rent","Family","Friends","Healthcare","Shopping","Self Growth","Entertainment & Travel","Sadaqa","Miscellaneous"];
+var DEFAULT_CATEGORIES = ["Groceries","Food & Dining","Transport","Utilities","Rent","Subscriptions","Family","Friends","Healthcare","Shopping","Self Growth","Entertainment & Travel","Sadaqa","Miscellaneous"];
+var SUB_CATEGORY = "Subscriptions";
 var DEFAULT_INCOME_CATEGORIES = ["Income source 1","Income source 2"];
 
 // Supported currencies: code -> { symbol, locale for number formatting }
@@ -60,7 +64,9 @@ var state = {
   noSpendDays:[],
   alertsSeen:{},
   currency:"EUR",
-  profile:{ first:"", last:"" }
+  profile:{ first:"", last:"" },
+  subscriptions:[],
+  subsCatSeeded:false
 };
 var viewMonthOffset = 0;
 var nudgeDismissed = false;
@@ -170,7 +176,7 @@ window.addEventListener("popstate",function(){
 // All four tab panels stay in the DOM at all times (never rebuilt), so
 // switching tabs is just a display toggle and each tab keeps its own
 // scroll position automatically.
-var TAB_IDS = { home:"app", analysis:"tabAnalysis", accounts:"tabAccounts", more:"tabMore" };
+var TAB_IDS = { home:"app", analysis:"tabAnalysis", subs:"tabSubs", more:"tabMore" };
 var currentTab = "home";
 function paintTab(name){
   Object.keys(TAB_IDS).forEach(function(t){
@@ -326,6 +332,8 @@ function loadCloudData(token, userId){
         state.alertsSeen = (d.alertsSeen && typeof d.alertsSeen==="object")?d.alertsSeen:{};
         state.currency = (d.currency && CURRENCIES[d.currency])?d.currency:"EUR";
         state.profile = (d.profile && typeof d.profile==="object")?{first:d.profile.first||"",last:d.profile.last||""}:{first:"",last:""};
+        state.subscriptions = Array.isArray(d.subscriptions)?d.subscriptions:[];
+        state.subsCatSeeded = d.subsCatSeeded===true;
         dataLoaded = true;
         return true; // existing data found
       }
@@ -385,6 +393,10 @@ function doSave(){
 // isn't lost — visibilitychange fires reliably on mobile, unlike beforeunload.
 document.addEventListener("visibilitychange", function(){
   if(document.visibilityState==="hidden" && saveTimer){ clearTimeout(saveTimer); flushSave(); }
+  // App left open overnight and brought back: log any subscription that fell due meanwhile.
+  if(document.visibilityState==="visible" && currentUser && dataLoaded){
+    if(processSubscriptions()){ doSave(); render(); }
+  }
 });
 window.addEventListener("pagehide", function(){
   if(saveTimer){ clearTimeout(saveTimer); flushSave(); }
@@ -496,6 +508,15 @@ function showApp(mode){
     else if(mode==="new") sub.textContent = "welcome to Ledger!";
     else sub.textContent = "welcome back";
   }
+  // One-time: give existing accounts the new "Subscriptions" category.
+  // The flag stops it coming back if the user deletes it later.
+  var needsSave=false;
+  if(!state.subsCatSeeded){
+    if(state.categories.indexOf(SUB_CATEGORY)===-1) state.categories.push(SUB_CATEGORY);
+    state.subsCatSeeded=true; needsSave=true;
+  }
+  if(processSubscriptions()) needsSave=true;
+  if(needsSave) doSave();
   render();
   renderWhatsNewCard();
   // Full-width welcome banner for first-time users
@@ -722,7 +743,7 @@ document.getElementById("recoverResetBtn").addEventListener("click", function(){
 });
 
 // ---- Sign out ----
-function freshState(){ return {transactions:[],categories:DEFAULT_CATEGORIES.slice(),incomeCategories:DEFAULT_INCOME_CATEGORIES.slice(),budget:0,categoryBudgets:{},bestStreak:0,noSpendDays:[],alertsSeen:{},currency:"EUR",profile:{first:"",last:""}}; }
+function freshState(){ return {transactions:[],categories:DEFAULT_CATEGORIES.slice(),incomeCategories:DEFAULT_INCOME_CATEGORIES.slice(),budget:0,categoryBudgets:{},bestStreak:0,noSpendDays:[],alertsSeen:{},currency:"EUR",profile:{first:"",last:""},subscriptions:[],subsCatSeeded:true}; }
 document.getElementById("signOutBtn").addEventListener("click",function(){
   showConfirm("Sign out?","You'll need to sign in again on this device.",function(){
     if(saveTimer){ clearTimeout(saveTimer); saveTimer=null; } // cancel any pending save
@@ -760,7 +781,9 @@ function categoryTotals(mk){
 }
 // A day "counts" if something was logged OR it was marked a no-spend day.
 function isNoSpendDay(iso){ return (state.noSpendDays||[]).indexOf(iso)>-1; }
-function loggedOn(iso){ return state.transactions.some(function(t){ return t.date===iso; }); }
+// Auto-logged subscription entries don't count toward the streak or the
+// "nothing logged today" nudge: those track the user's own logging habit.
+function loggedOn(iso){ return state.transactions.some(function(t){ return t.date===iso && !t.subId; }); }
 function markNoSpendToday(){
   var t=todayISO();
   if(!state.noSpendDays) state.noSpendDays=[];
@@ -773,7 +796,7 @@ function unmarkNoSpendToday(){
   doSave(); render();
 }
 function currentStreak(){
-  var ds={};state.transactions.forEach(function(t){ ds[t.date]=true; });
+  var ds={};state.transactions.forEach(function(t){ if(!t.subId) ds[t.date]=true; });
   (state.noSpendDays||[]).forEach(function(d){ ds[d]=true; });
   var c=0,cursor=new Date();
   if(!ds[todayISO()]) cursor.setDate(cursor.getDate()-1);
@@ -810,6 +833,7 @@ function render(){
   renderDonut(mk,totals);
   renderCategoryList(mk,totals);
   renderActivity(mk);
+  renderSubs();
 }
 function renderBudgetBlock(spent){
   var el=document.getElementById("budgetBlock");
@@ -838,7 +862,7 @@ function renderNudge(){
 // ---- Streak highlighter (Duolingo-style) ----
 // Returns the last 7 days as [{label, iso, done, isToday}] Mon→Sun of THIS week.
 function weekDays(){
-  var logged={}; state.transactions.forEach(function(t){ logged[t.date]=true; });
+  var logged={}; state.transactions.forEach(function(t){ if(!t.subId) logged[t.date]=true; });
   var now=new Date();
   // find Monday of current week (getDay: 0=Sun..6=Sat)
   var dow=now.getDay(); var mondayOffset=(dow===0?-6:1-dow);
@@ -984,12 +1008,13 @@ function buildAlerts(){
       a.sev = th>=100?"red":(th>=80?"orange":"green");
     }
   });
-  return alerts;
+  // Subscription reminders and "just logged" notes go first — they're the most time-sensitive.
+  return subAlerts().concat(alerts);
 }
 // A key that changes only when a streak is broken, so a milestone alert for a
 // given streak-run fires once (not every day the streak continues).
 function streakEpochKey(){
-  var ds={}; state.transactions.forEach(function(t){ ds[t.date]=true; });
+  var ds={}; state.transactions.forEach(function(t){ if(!t.subId) ds[t.date]=true; });
   var cursor=new Date();
   if(!ds[todayISO()]) cursor.setDate(cursor.getDate()-1);
   var last=null;
@@ -1126,7 +1151,7 @@ function renderActivity(mk){
     var dp=ds.split("-").map(Number),dObj=new Date(dp[0],dp[1]-1,dp[2]);
     html+='<div class="day-group"><div class="day-heading">'+WEEKDAYS[dObj.getDay()]+", "+dObj.getDate()+" "+MONTH_NAMES[dObj.getMonth()].slice(0,3)+'</div>';
     groups[ds].forEach(function(t){
-      html+='<div class="tx-row" data-id="'+t.id+'"><div class="tx-main"><div class="tx-desc">'+escapeHtml(t.description||t.category)+'</div><div class="tx-cat">'+escapeHtml(t.category)+'</div></div><div class="tx-amount '+t.type+'">'+(t.type==="income"?"+":"−")+" "+fmt(t.amount)+'</div></div>';
+      html+='<div class="tx-row" data-id="'+t.id+'"><div class="tx-main"><div class="tx-desc">'+escapeHtml(t.description||t.category)+'</div><div class="tx-cat">'+escapeHtml(t.category)+(t.subId?'<span class="tx-tag">↻ Subscription</span>':'')+'</div></div><div class="tx-amount '+t.type+'">'+(t.type==="income"?"+":"−")+" "+fmt(t.amount)+'</div></div>';
     });
     html+='</div>';
   });
@@ -1235,7 +1260,7 @@ document.getElementById("txDelete").addEventListener("click",function(){
   var id=editingId;
   var t=state.transactions.find(function(x){ return x.id===id; });
   if(!t){ closeTxSheet(); return; }
-  var removed={id:t.id,type:t.type,amount:t.amount,category:t.category,description:t.description,date:t.date,_order:t._order};
+  var removed=JSON.parse(JSON.stringify(t)); // full copy, so undo keeps extras like the subscription tag
   closeTxSheet();
   // optimistic delete + undo window (no blocking confirm dialog)
   state.transactions=state.transactions.filter(function(x){ return x.id!==id; });
@@ -1252,13 +1277,423 @@ function showUndo(msg, removedTx){
 }
 document.getElementById("undoToastBtn").addEventListener("click",function(){
   if(pendingUndo){
-    state.transactions.push(pendingUndo);
+    // Either a deleted entry, or {restore:fn} for anything else (e.g. a deleted subscription)
+    if(typeof pendingUndo.restore==="function") pendingUndo.restore();
+    else state.transactions.push(pendingUndo);
     pendingUndo=null;
     doSave(); render();
   }
   clearTimeout(undoTimer);
   document.getElementById("undoToast").classList.remove("show");
 });
+
+// ---- Subscriptions ----
+// Recurring payments. On its payment date each ACTIVE subscription becomes a
+// normal expense entry (tagged with subId). Ledger has no server running in the
+// background, so this happens the next time the app is opened or brought back
+// to the front: anything that fell due in the meantime is logged with its real
+// date, and never twice.
+var CYCLE_MONTHS = { monthly:1, quarterly:3, yearly:12 };
+var CYCLE_LABEL = { monthly:"Monthly", quarterly:"Quarterly", yearly:"Yearly" };
+var SUB_COLORS = ["#E07A3F","#3F63C9","#2E9E6A","#7A5AC9","#C9485B","#D9A93F","#2B8C9E","#3A3F4F","#C9579E","#6F8F3F"];
+var SUB_SORTS = [["date","Bill date"],["priceDesc","Most expensive"],["priceAsc","Cheapest"],["name","Alphabetical"],["category","Category"],["method","Payment method"]];
+
+function parseISO(s){ var p=String(s).split("-").map(Number); return new Date(p[0],p[1]-1,p[2]); }
+function toISO(d){ return d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate()); }
+function daysUntil(iso){ return Math.round((parseISO(iso)-parseISO(todayISO()))/86400000); }
+function shortDate(iso){ var d=parseISO(iso); return d.getDate()+" "+MONTH_NAMES[d.getMonth()].slice(0,3); }
+// Step a date forward n months, keeping the original day of month where it exists:
+// a subscription started on the 31st bills on the 30th in 30-day months, then the 31st again.
+function addMonthsAnchored(iso,n,anchor){
+  var d=parseISO(iso), y=d.getFullYear(), m=d.getMonth()+n;
+  y+=Math.floor(m/12); m=((m%12)+12)%12;
+  var dim=new Date(y,m+1,0).getDate();
+  return toISO(new Date(y,m,Math.min(anchor||d.getDate(),dim)));
+}
+function subStep(sub){ return CYCLE_MONTHS[sub.cycle]||1; }
+function subMonthly(sub){ return (Number(sub.amount)||0)/subStep(sub); }
+// First payment date that is today or later, WITHOUT logging anything (used for paused subs).
+function subRolledDate(sub){
+  var d=sub.nextDate||todayISO(), today=todayISO(), guard=0;
+  while(d<today && guard<240){ d=addMonthsAnchored(d,subStep(sub),sub.anchorDay); guard++; }
+  return d;
+}
+function safeColor(c){ return /^#[0-9a-fA-F]{6}$/.test(c||"")?c:SUB_COLORS[0]; }
+function isLightColor(hex){
+  var h=safeColor(hex).slice(1);
+  var r=parseInt(h.substr(0,2),16), g=parseInt(h.substr(2,2),16), b=parseInt(h.substr(4,2),16);
+  return (0.299*r+0.587*g+0.114*b)>165;
+}
+function dueWords(iso){
+  var d=daysUntil(iso);
+  if(d<=0) return "today";
+  if(d===1) return "tomorrow";
+  return "in "+d+" days";
+}
+
+// Log every active subscription whose date has arrived. Returns true if anything changed.
+function processSubscriptions(){
+  if(!Array.isArray(state.subscriptions)) state.subscriptions=[];
+  var today=todayISO(), changed=false;
+  state.subscriptions.forEach(function(sub){
+    if(!sub.active || !sub.nextDate) return;
+    var guard=0;
+    while(sub.nextDate<=today && guard<120){
+      var date=sub.nextDate;
+      var dup=state.transactions.some(function(t){ return t.subId===sub.id && t.date===date; });
+      if(!dup){
+        state.transactions.push({ id:uid(), type:"expense", amount:Number(sub.amount)||0,
+          category:sub.category||SUB_CATEGORY, description:sub.name, date:date,
+          _order:Date.now()+guard, subId:sub.id });
+      }
+      sub.lastLogged=date;   // payment date of the latest entry
+      sub.loggedOn=today;    // the day Ledger actually added it (can be later, if the app wasn't opened)
+      sub.nextDate=addMonthsAnchored(date,subStep(sub),sub.anchorDay);
+      guard++; changed=true;
+    }
+  });
+  return changed;
+}
+
+// Bell-panel items: "renews in N days" reminders + "just logged" notes.
+function subAlerts(){
+  var out=[];
+  (state.subscriptions||[]).forEach(function(sub){
+    if(!sub.active || !sub.nextDate) return;
+    var d=daysUntil(sub.nextDate);
+    var remind=Number(sub.remindDays)||0;
+    if(remind>0 && d>0 && d<=remind){
+      out.push({ id:"subdue:"+sub.id+":"+sub.nextDate, sev:"orange", icon:"🔔",
+        title:sub.name+(d===1?" renews tomorrow":" renews in "+d+" days"),
+        body:fmt(sub.amount)+" will be added to your expenses on "+shortDate(sub.nextDate)+"." });
+    }
+    if(sub.lastLogged && daysUntil(sub.loggedOn||sub.lastLogged)>=-1){
+      out.push({ id:"sublog:"+sub.id+":"+sub.lastLogged, sev:"info", icon:"↻",
+        title:sub.name+" logged",
+        body:fmt(sub.amount)+" was added to your expenses for "+shortDate(sub.lastLogged)+"." });
+    }
+  });
+  return out;
+}
+
+// ---- Subscriptions: list view (sort + filter, remembered per device) ----
+var subView={ status:"active", cats:[], methods:[], sort:"date", reverse:false };
+try{
+  var savedView=JSON.parse(localStorage.getItem("ledger_sub_view")||"null");
+  if(savedView && typeof savedView==="object"){
+    if(["active","all","paused"].indexOf(savedView.status)>-1) subView.status=savedView.status;
+    if(Array.isArray(savedView.cats)) subView.cats=savedView.cats;
+    if(Array.isArray(savedView.methods)) subView.methods=savedView.methods;
+    if(SUB_SORTS.some(function(o){ return o[0]===savedView.sort; })) subView.sort=savedView.sort;
+    subView.reverse=savedView.reverse===true;
+  }
+}catch(e){}
+function saveSubView(){ try{ localStorage.setItem("ledger_sub_view",JSON.stringify(subView)); }catch(e){} }
+
+function subMatchesStatus(sub,status){ return status==="all" || (status==="active" ? !!sub.active : !sub.active); }
+function subMatches(sub){
+  if(!subMatchesStatus(sub,subView.status)) return false;
+  if(subView.cats.length && subView.cats.indexOf(sub.category||SUB_CATEGORY)===-1) return false;
+  if(subView.methods.length && subView.methods.indexOf(sub.payMethod||"")===-1) return false;
+  return true;
+}
+function sortSubs(list){
+  var s=subView.sort;
+  list.sort(function(a,b){
+    if(!!a.active!==!!b.active) return a.active?-1:1; // paused always sink to the bottom
+    var r=0;
+    if(s==="priceDesc") r=subMonthly(b)-subMonthly(a);
+    else if(s==="priceAsc") r=subMonthly(a)-subMonthly(b);
+    else if(s==="name") r=String(a.name).localeCompare(String(b.name));
+    else if(s==="category") r=String(a.category||"").localeCompare(String(b.category||""));
+    else if(s==="method") r=String(a.payMethod||"￿").localeCompare(String(b.payMethod||"￿"));
+    if(r===0) r=String(a.nextDate||"").localeCompare(String(b.nextDate||""));
+    if(r===0) r=String(a.name).localeCompare(String(b.name));
+    return subView.reverse?-r:r;
+  });
+  return list;
+}
+function renderSubs(){
+  var listEl=document.getElementById("subList");
+  if(!listEl) return;
+  var subs=state.subscriptions||[];
+  var today=todayISO();
+
+  // Summary card: what the active subscriptions cost, whatever the filter
+  var active=subs.filter(function(s){ return s.active; });
+  var perMonth=active.reduce(function(t,s){ return t+subMonthly(s); },0);
+  var next=active.slice().sort(function(a,b){ return String(a.nextDate).localeCompare(String(b.nextDate)); })[0];
+  var sumEl=document.getElementById("subSummary");
+  if(!subs.length){ sumEl.style.display="none"; sumEl.innerHTML=""; }
+  else {
+    sumEl.style.display="block";
+    sumEl.innerHTML='<div class="ss-label">Active subscriptions cost</div>'+
+      '<div class="ss-amount">≈ '+fmt(perMonth)+'<span> / month</span></div>'+
+      '<div class="ss-sub">≈ '+fmt(perMonth*12)+' a year · '+active.length+' active'+
+        (next?' · next: '+escapeHtml(next.name)+' '+dueWords(next.nextDate):'')+'</div>';
+  }
+
+  var titles={ active:"Active subscriptions", all:"All subscriptions", paused:"Paused subscriptions" };
+  document.getElementById("subTitleText").textContent=titles[subView.status]||titles.active;
+  document.getElementById("subFilterBtn").classList.toggle("has-filter", subView.cats.length>0 || subView.methods.length>0);
+
+  if(!subs.length){
+    listEl.innerHTML='<div class="subs-empty"><div class="se-icon">↻</div><b>No subscriptions yet</b>'+
+      '<p>Add anything that repeats — Netflix, the gym, rent, your phone plan. Ledger adds it to your expenses on the payment date and reminds you before.</p>'+
+      '<button class="btn-primary" id="subEmptyAdd">Add a subscription</button></div>';
+    document.getElementById("subEmptyAdd").addEventListener("click",function(){ openSubSheet(null); });
+    return;
+  }
+  var shown=sortSubs(subs.filter(subMatches));
+  if(!shown.length){
+    listEl.innerHTML='<div class="subs-empty"><p>Nothing matches this filter.</p>'+
+      '<button class="btn-secondary" id="subShowAll" style="width:100%;">Show all subscriptions</button></div>';
+    document.getElementById("subShowAll").addEventListener("click",function(){
+      subView.status="all"; subView.cats=[]; subView.methods=[]; saveSubView(); renderSubs();
+    });
+    return;
+  }
+  listEl.innerHTML=shown.map(function(s){
+    var color=safeColor(s.color);
+    var initial=(String(s.name).trim().charAt(0)||"?").toUpperCase();
+    var meta=CYCLE_LABEL[s.cycle]||"Monthly";
+    if(subStep(s)>1) meta+=" · ≈ "+fmt(subMonthly(s))+"/mo";
+    if(s.payMethod) meta+=" · "+s.payMethod;
+    var due;
+    if(!s.active) due="Paused";
+    else if(s.lastLogged===today) due="Logged today";
+    else { var d=daysUntil(s.nextDate); due = d>30 ? shortDate(s.nextDate) : (d===1 ? "Tomorrow" : "In "+d+" days"); }
+    return '<button type="button" class="sub-card'+(isLightColor(color)?' dark-text':'')+(s.active?'':' paused')+'" data-sid="'+escapeHtml(s.id)+'" style="background:'+color+';">'+
+      '<span class="sub-initial">'+escapeHtml(initial)+'</span>'+
+      '<span class="sub-main"><span class="sub-name">'+escapeHtml(s.name)+'</span><span class="sub-meta">'+escapeHtml(meta)+'</span></span>'+
+      '<span class="sub-right"><span class="sub-amt">'+fmt(s.amount)+'</span><span class="sub-due">'+escapeHtml(due)+'</span></span>'+
+    '</button>';
+  }).join("");
+  Array.prototype.forEach.call(listEl.querySelectorAll(".sub-card"),function(card){
+    card.addEventListener("click",function(){
+      var id=card.getAttribute("data-sid");
+      var sub=subs.find(function(x){ return x.id===id; });
+      if(sub) openSubSheet(sub);
+    });
+  });
+}
+
+// ---- Subscriptions: small helpers shared by the three sheets ----
+function openOverlayLayer(overlayId,layerId,onClose){
+  var ov=document.getElementById(overlayId);
+  ov.classList.add("open");
+  openLayer(layerId,function(){ ov.classList.remove("open"); if(onClose) onClose(); });
+}
+function closeOverlayLayer(overlayId,layerId,onClose){
+  if(!closeLayer(layerId)){ document.getElementById(overlayId).classList.remove("open"); if(onClose) onClose(); }
+}
+function optRow(kind,key,label,on,val){
+  return '<button type="button" class="opt-row '+kind+(on?' on':'')+'" data-key="'+escapeHtml(key)+'">'+
+    '<span class="opt-mark">'+(kind==="check"&&on?'✓':'')+'</span>'+
+    '<span class="opt-label">'+escapeHtml(label)+'</span>'+
+    (val?'<span class="opt-val">'+escapeHtml(val)+'</span>':'')+'</button>';
+}
+function keyParts(key){ var i=key.indexOf(":"); return [key.slice(0,i), key.slice(i+1)]; }
+
+// ---- Subscriptions: add / edit sheet ----
+var editingSubId=null, subFormCycle="monthly", subFormColor=SUB_COLORS[0], subFormActive=true, subFormOrigDate="";
+function setSubCycle(c){
+  subFormCycle=CYCLE_MONTHS[c]?c:"monthly";
+  Array.prototype.forEach.call(document.querySelectorAll("#subCycleToggle button"),function(b){
+    b.classList.toggle("active", b.getAttribute("data-cycle")===subFormCycle);
+  });
+}
+function setSubActive(on){
+  subFormActive=!!on;
+  var sw=document.getElementById("subActiveSwitch");
+  sw.classList.toggle("on",subFormActive);
+  sw.setAttribute("aria-pressed",subFormActive?"true":"false");
+}
+function renderSwatches(){
+  var el=document.getElementById("subSwatches");
+  el.innerHTML=SUB_COLORS.map(function(c){
+    return '<button type="button" class="swatch'+(c===subFormColor?' on':'')+'" data-color="'+c+'" style="background:'+c+';" aria-label="Colour '+c+'"></button>';
+  }).join("");
+  Array.prototype.forEach.call(el.querySelectorAll(".swatch"),function(b){
+    b.addEventListener("click",function(){ subFormColor=b.getAttribute("data-color"); renderSwatches(); });
+  });
+}
+function openSubSheet(sub){
+  editingSubId=sub?sub.id:null;
+  document.getElementById("subSheetTitle").textContent=sub?"Edit subscription":"Add subscription";
+  document.getElementById("subDelete").style.display=sub?"block":"none";
+  ["subNameErr","subAmountErr","subDateErr"].forEach(function(id){ document.getElementById(id).classList.remove("show"); });
+  document.getElementById("subAmountLabel").textContent="Amount ("+state.currency+")";
+  document.getElementById("subName").value=sub?sub.name:"";
+  document.getElementById("subAmount").value=sub?sub.amount:"";
+  setSubCycle(sub?sub.cycle:"monthly");
+  var dateEl=document.getElementById("subDate");
+  dateEl.min=todayISO();
+  subFormOrigDate=sub?subRolledDate(sub):"";
+  dateEl.value=subFormOrigDate;
+  // Category: expense categories, plus the sub's own even if it was removed since
+  // ("Subscriptions" is always offered as the default, even if it was deleted from Categories)
+  var cats=state.categories.slice();
+  if(cats.indexOf(SUB_CATEGORY)===-1) cats.unshift(SUB_CATEGORY);
+  var cur=sub?(sub.category||SUB_CATEGORY):SUB_CATEGORY;
+  if(cats.indexOf(cur)===-1) cats.push(cur);
+  document.getElementById("subCategory").innerHTML=cats.map(function(c){
+    return '<option value="'+escapeHtml(c)+'"'+(c===cur?' selected':'')+'>'+escapeHtml(c)+'</option>';
+  }).join("");
+  // Payment method + suggestions from methods already used
+  document.getElementById("subPayMethod").value=sub?(sub.payMethod||""):"";
+  var methods=[];
+  (state.subscriptions||[]).forEach(function(s){ if(s.payMethod && methods.indexOf(s.payMethod)===-1) methods.push(s.payMethod); });
+  document.getElementById("subPayList").innerHTML=methods.map(function(m){ return '<option value="'+escapeHtml(m)+'">'; }).join("");
+  document.getElementById("subRemind").value=String(sub?(Number(sub.remindDays)||0):1);
+  if(sub){ subFormColor=safeColor(sub.color); }
+  else {
+    var used=(state.subscriptions||[]).map(function(s){ return s.color; });
+    subFormColor=SUB_COLORS.find(function(c){ return used.indexOf(c)===-1; }) || SUB_COLORS[(state.subscriptions||[]).length%SUB_COLORS.length];
+  }
+  renderSwatches();
+  setSubActive(sub?sub.active:true);
+  openOverlayLayer("subOverlay","sub",function(){ editingSubId=null; });
+  if(!sub) setTimeout(function(){ document.getElementById("subName").focus(); },300);
+}
+function closeSubSheet(){ closeOverlayLayer("subOverlay","sub",function(){ editingSubId=null; }); }
+function saveSubFromSheet(){
+  var ok=true;
+  var name=document.getElementById("subName").value.trim();
+  var amount=parseFloat(document.getElementById("subAmount").value);
+  var date=document.getElementById("subDate").value;
+  document.getElementById("subNameErr").classList.toggle("show",!name); if(!name) ok=false;
+  var badAmount=isNaN(amount)||amount<=0;
+  document.getElementById("subAmountErr").classList.toggle("show",badAmount); if(badAmount) ok=false;
+  var badDate=!date||date<todayISO();
+  document.getElementById("subDateErr").classList.toggle("show",badDate); if(badDate) ok=false;
+  if(!ok) return;
+  var fields={
+    name:name.slice(0,40),
+    amount:Math.round(amount*100)/100,
+    cycle:subFormCycle,
+    category:document.getElementById("subCategory").value||SUB_CATEGORY,
+    payMethod:document.getElementById("subPayMethod").value.trim().slice(0,30),
+    remindDays:parseInt(document.getElementById("subRemind").value,10)||0,
+    color:safeColor(subFormColor),
+    active:subFormActive
+  };
+  // Chosen category must exist so it shows up in pickers, Analysis and caps
+  if(state.categories.indexOf(fields.category)===-1) state.categories.push(fields.category);
+  if(editingSubId){
+    var sub=(state.subscriptions||[]).find(function(x){ return x.id===editingSubId; });
+    if(!sub){ closeSubSheet(); return; }
+    Object.keys(fields).forEach(function(k){ sub[k]=fields[k]; });
+    if(date!==subFormOrigDate) sub.anchorDay=parseISO(date).getDate(); // user picked a new billing day
+    sub.nextDate=date;
+  } else {
+    if(!Array.isArray(state.subscriptions)) state.subscriptions=[];
+    fields.id=uid();
+    fields.nextDate=date;
+    fields.anchorDay=parseISO(date).getDate();
+    fields.createdAt=todayISO();
+    state.subscriptions.push(fields);
+  }
+  processSubscriptions(); // a payment dated today is logged straight away
+  doSave(); render();
+  closeSubSheet();
+}
+// Clear each validation message as soon as its field is fixed
+[["subName","subNameErr"],["subAmount","subAmountErr"],["subDate","subDateErr"]].forEach(function(pair){
+  function clear(){ document.getElementById(pair[1]).classList.remove("show"); }
+  document.getElementById(pair[0]).addEventListener("input",clear);
+  document.getElementById(pair[0]).addEventListener("change",clear);
+});
+document.getElementById("subFab").addEventListener("click",function(){ openSubSheet(null); });
+document.getElementById("subCancel").addEventListener("click",closeSubSheet);
+document.getElementById("subSave").addEventListener("click",saveSubFromSheet);
+document.getElementById("subOverlay").addEventListener("click",function(e){ if(e.target===this) closeSubSheet(); });
+Array.prototype.forEach.call(document.querySelectorAll("#subCycleToggle button"),function(b){
+  b.addEventListener("click",function(){ setSubCycle(b.getAttribute("data-cycle")); });
+});
+document.getElementById("subActiveSwitch").addEventListener("click",function(){ setSubActive(!subFormActive); });
+document.getElementById("subDelete").addEventListener("click",function(){
+  var id=editingSubId;
+  var idx=(state.subscriptions||[]).findIndex(function(x){ return x.id===id; });
+  if(idx===-1){ closeSubSheet(); return; }
+  var removed=JSON.parse(JSON.stringify(state.subscriptions[idx]));
+  closeSubSheet();
+  state.subscriptions.splice(idx,1);
+  doSave(); render();
+  // Entries it already logged stay in the history; undo brings the subscription back.
+  showUndo("Subscription deleted",{ restore:function(){ state.subscriptions.push(removed); } });
+});
+
+// ---- Subscriptions: sort sheet ----
+function renderSubSortList(){
+  var el=document.getElementById("subSortList");
+  el.innerHTML=SUB_SORTS.map(function(o){ return optRow("radio","sort:"+o[0],o[1],subView.sort===o[0],""); }).join("")+
+    '<div class="opt-section">Order</div>'+optRow("check","reverse:1","Reverse order",subView.reverse,"");
+  Array.prototype.forEach.call(el.querySelectorAll(".opt-row"),function(row){
+    row.addEventListener("click",function(){
+      var kp=keyParts(row.getAttribute("data-key"));
+      if(kp[0]==="sort") subView.sort=kp[1];
+      else subView.reverse=!subView.reverse;
+      saveSubView(); renderSubSortList(); renderSubs();
+    });
+  });
+}
+document.getElementById("subSortBtn").addEventListener("click",function(){ renderSubSortList(); openOverlayLayer("subSortOverlay","subSort"); });
+document.getElementById("subSortClose").addEventListener("click",function(){ closeOverlayLayer("subSortOverlay","subSort"); });
+document.getElementById("subSortOverlay").addEventListener("click",function(e){ if(e.target===this) closeOverlayLayer("subSortOverlay","subSort"); });
+
+// ---- Subscriptions: filter sheet (with per-month totals, like the list they filter) ----
+function renderSubFilterList(){
+  var el=document.getElementById("subFilterList");
+  var subs=state.subscriptions||[];
+  function total(list){ return fmt(list.reduce(function(t,s){ return t+subMonthly(s); },0))+"/mo"; }
+  var html='<div class="opt-section">Show</div>';
+  [["active","Active"],["all","All"],["paused","Paused"]].forEach(function(o){
+    var list=subs.filter(function(s){ return subMatchesStatus(s,o[0]); });
+    html+=optRow("radio","status:"+o[0],o[1]+" ("+list.length+")",subView.status===o[0],total(list));
+  });
+  var base=subs.filter(function(s){ return subMatchesStatus(s,subView.status); });
+  var cats=[], methods=[];
+  subs.forEach(function(s){
+    var c=s.category||SUB_CATEGORY; if(cats.indexOf(c)===-1) cats.push(c);
+    if(s.payMethod && methods.indexOf(s.payMethod)===-1) methods.push(s.payMethod);
+  });
+  subView.cats.forEach(function(c){ if(cats.indexOf(c)===-1) cats.push(c); });
+  subView.methods.forEach(function(m){ if(methods.indexOf(m)===-1) methods.push(m); });
+  cats.sort(); methods.sort();
+  if(cats.length){
+    html+='<div class="opt-section">Categories</div>';
+    cats.forEach(function(c){
+      html+=optRow("check","cat:"+c,c,subView.cats.indexOf(c)>-1,total(base.filter(function(s){ return (s.category||SUB_CATEGORY)===c; })));
+    });
+  }
+  if(methods.length){
+    html+='<div class="opt-section">Payment methods</div>';
+    methods.forEach(function(m){
+      html+=optRow("check","method:"+m,m,subView.methods.indexOf(m)>-1,total(base.filter(function(s){ return s.payMethod===m; })));
+    });
+  }
+  el.innerHTML=html;
+  Array.prototype.forEach.call(el.querySelectorAll(".opt-row"),function(row){
+    row.addEventListener("click",function(){
+      var kp=keyParts(row.getAttribute("data-key"));
+      function toggle(arr,v){ var i=arr.indexOf(v); if(i>-1) arr.splice(i,1); else arr.push(v); }
+      if(kp[0]==="status") subView.status=kp[1];
+      else if(kp[0]==="cat") toggle(subView.cats,kp[1]);
+      else if(kp[0]==="method") toggle(subView.methods,kp[1]);
+      saveSubView(); renderSubFilterList(); renderSubs();
+    });
+  });
+}
+function openSubFilter(){ renderSubFilterList(); openOverlayLayer("subFilterOverlay","subFilter"); }
+document.getElementById("subTitleBtn").addEventListener("click",openSubFilter);
+document.getElementById("subFilterBtn").addEventListener("click",openSubFilter);
+document.getElementById("subFilterClose").addEventListener("click",function(){ closeOverlayLayer("subFilterOverlay","subFilter"); });
+document.getElementById("subFilterReset").addEventListener("click",function(){
+  subView.status="active"; subView.cats=[]; subView.methods=[];
+  saveSubView(); renderSubFilterList(); renderSubs();
+});
+document.getElementById("subFilterOverlay").addEventListener("click",function(e){ if(e.target===this) closeOverlayLayer("subFilterOverlay","subFilter"); });
 
 // ---- Settings ----
 // settingsOverlay no longer exists — Settings now lives inline in the More tab.
@@ -1643,6 +2078,9 @@ function enableSheetDrag(overlayId, closeFn){
 }
 enableSheetDrag("txOverlay", closeTxSheet);
 enableSheetDrag("notifOverlay", closeNotif);
+enableSheetDrag("subOverlay", closeSubSheet);
+enableSheetDrag("subSortOverlay", function(){ closeOverlayLayer("subSortOverlay","subSort"); });
+enableSheetDrag("subFilterOverlay", function(){ closeOverlayLayer("subFilterOverlay","subFilter"); });
 
 // ---- Start ----
 boot();

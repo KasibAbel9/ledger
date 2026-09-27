@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="styles.css?v=1.7.0">
+<link rel="stylesheet" href="styles.css?v=1.8.0">
 </head>
 <body>
 
@@ -219,14 +219,20 @@
   </div>
 </div>
 
-<!-- Accounts tab (placeholder — bank connections coming soon) -->
-<div id="tabAccounts" class="tab-panel" style="display:none;">
-  <div class="tab-header"><h2>Accounts</h2></div>
-  <div class="accounts-empty">
-    <div class="accounts-empty-icon">🏦</div>
-    <h3>Bank accounts, coming soon</h3>
-    <p>Connect a bank account to have your transactions logged automatically. This is on the roadmap — for now, keep logging manually below.</p>
+<!-- Subscriptions tab -->
+<div id="tabSubs" class="tab-panel" style="display:none;">
+  <div class="subs-head">
+    <button class="icon-btn" id="subSortBtn" title="Sort" aria-label="Sort">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="15" y2="12"/><line x1="4" y1="18" x2="10" y2="18"/></svg>
+    </button>
+    <button class="subs-title-btn" id="subTitleBtn"><span id="subTitleText">Active subscriptions</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><polyline points="6 9 12 15 18 9"/></svg></button>
+    <button class="icon-btn" id="subFilterBtn" title="Filter" aria-label="Filter">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><polygon points="3 4 21 4 14 12.5 14 19 10 21 10 12.5 3 4"/></svg>
+    </button>
   </div>
+  <div class="subs-summary" id="subSummary" style="display:none;"></div>
+  <div class="sub-list" id="subList"></div>
+  <button class="fab" id="subFab" aria-label="Add subscription">+</button>
 </div>
 
 <!-- Add/Edit Sheet -->
@@ -254,6 +260,73 @@
     </div>
     <button class="btn-secondary" id="txSaveAnother" style="width:100%;margin-top:10px;">Save &amp; add another</button>
     <button class="btn-danger" id="txDelete" style="display:none;">Delete entry</button>
+  </div>
+</div>
+
+<!-- Subscription add/edit sheet -->
+<div class="overlay" id="subOverlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3 id="subSheetTitle">Add subscription</h3>
+    <div class="field"><label>Name</label><input type="text" id="subName" maxlength="40" autocomplete="off" placeholder="e.g. Netflix, gym, phone plan"></div>
+    <div class="err" id="subNameErr">Give it a name.</div>
+    <div class="field"><label id="subAmountLabel">Amount (EUR)</label><input type="number" id="subAmount" inputmode="decimal" step="0.01" min="0.01" placeholder="0.00"></div>
+    <div class="err" id="subAmountErr">Enter an amount greater than 0.</div>
+    <div class="field"><label>Billing cycle</label>
+      <div class="type-toggle" id="subCycleToggle" style="margin-bottom:0;">
+        <button type="button" data-cycle="monthly" class="active">Monthly</button>
+        <button type="button" data-cycle="quarterly">Quarterly</button>
+        <button type="button" data-cycle="yearly">Yearly</button>
+      </div>
+    </div>
+    <div class="field"><label>Next payment date</label><input type="date" id="subDate"></div>
+    <div class="err" id="subDateErr">Pick today or a date in the future.</div>
+    <p class="field-hint">On this date the amount is added to your expenses automatically, then it moves on to the next cycle. If it's today, today's payment is added as soon as you save.</p>
+    <div class="field"><label>Category</label><select id="subCategory"></select></div>
+    <div class="field"><label>Payment method (optional)</label><input type="text" id="subPayMethod" list="subPayList" maxlength="30" autocomplete="off" placeholder="e.g. Wise, Visa, PayPal"><datalist id="subPayList"></datalist></div>
+    <div class="field"><label>Remind me</label>
+      <select id="subRemind">
+        <option value="0">Off</option>
+        <option value="1">1 day before</option>
+        <option value="2">2 days before</option>
+        <option value="3">3 days before</option>
+        <option value="5">5 days before</option>
+        <option value="7">7 days before</option>
+      </select>
+    </div>
+    <div class="field"><label>Colour</label><div class="swatches" id="subSwatches"></div></div>
+    <div class="switch-row">
+      <div class="sw-txt"><b>Active</b><span>Paused subscriptions aren't added to your expenses and don't remind you.</span></div>
+      <button type="button" class="switch on" id="subActiveSwitch" aria-label="Active" aria-pressed="true"></button>
+    </div>
+    <div class="sheet-actions">
+      <button class="btn-secondary" id="subCancel">Cancel</button>
+      <button class="btn-primary" id="subSave">Save</button>
+    </div>
+    <button class="btn-danger" id="subDelete" style="display:none;">Delete subscription</button>
+  </div>
+</div>
+
+<!-- Subscriptions: sort -->
+<div class="overlay" id="subSortOverlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3>Sort</h3>
+    <div id="subSortList"></div>
+    <div class="sheet-actions" style="margin-top:16px;"><button class="btn-secondary" id="subSortClose" style="width:100%;">Done</button></div>
+  </div>
+</div>
+
+<!-- Subscriptions: filter -->
+<div class="overlay" id="subFilterOverlay">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3>Filter subscriptions</h3>
+    <div id="subFilterList"></div>
+    <div class="sheet-actions" style="margin-top:16px;">
+      <button class="btn-secondary" id="subFilterReset">Reset</button>
+      <button class="btn-primary" id="subFilterClose">Done</button>
+    </div>
   </div>
 </div>
 
@@ -414,9 +487,9 @@
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
     <span>Analysis</span>
   </button>
-  <button class="nav-btn" data-tab="accounts">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"/><path d="M4 10h16"/><path d="M12 3l9 7H3l9-7z"/><path d="M6 10v8M12 10v8M18 10v8"/></svg>
-    <span>Accounts</span>
+  <button class="nav-btn" data-tab="subs">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.5 9A8.5 8.5 0 0 0 5 6.5L3.5 8"/><polyline points="3.5 3.5 3.5 8 8 8"/><path d="M3.5 15A8.5 8.5 0 0 0 19 17.5l1.5-1.5"/><polyline points="20.5 20.5 20.5 16 16 16"/></svg>
+    <span>Subscriptions</span>
   </button>
   <button class="nav-btn" data-tab="more">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="5" cy="12" r="1.6"/><circle cx="12" cy="12" r="1.6"/><circle cx="19" cy="12" r="1.6"/></svg>
@@ -457,6 +530,6 @@
 
 <div id="printArea"></div>
 
-<script src="app.js?v=1.7.2"></script>
+<script src="app.js?v=1.8.0"></script>
 </body>
 </html>

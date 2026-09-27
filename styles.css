@@ -88,6 +88,10 @@ h1,h2,h3{font-family:'Manrope',system-ui,sans-serif;}
 .install-bar-steps strong{color:var(--text);}
 
 /* App */
+/* The body is a centring flex container. Without an explicit width and
+   min-width:0, #appShell refuses to shrink below its widest row (e.g. the
+   category-cap row in Budgets) and spills off BOTH screen edges. */
+#appShell{width:100%;max-width:460px;min-width:0;}
 .tab-panel{padding-bottom:190px;}
 #app{display:none;}
 .topbar{display:flex;align-items:center;gap:10px;padding:20px 20px 6px;}
@@ -266,7 +270,7 @@ body[data-theme="day"] .balance-row .label{color:#3A2A1E;}
 /* Overlays */
 .overlay{position:fixed;inset:0;background:rgba(10,9,13,.55);backdrop-filter:blur(3px);-webkit-backdrop-filter:blur(3px);z-index:70;display:flex;align-items:flex-end;justify-content:center;opacity:0;pointer-events:none;transition:opacity .25s ease;}
 .overlay.open{opacity:1;pointer-events:auto;}
-.sheet{width:100%;max-width:460px;background:var(--surface);border-radius:20px 20px 0 0;padding:10px 22px 28px;transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1);max-height:88vh;overflow-y:auto;overscroll-behavior:contain;}
+.sheet{width:100%;max-width:460px;background:var(--surface);border-radius:20px 20px 0 0;padding:10px 22px calc(28px + env(safe-area-inset-bottom));transform:translateY(100%);transition:transform .3s cubic-bezier(.32,.72,0,1);max-height:88vh;overflow-y:auto;overscroll-behavior:contain;}
 /* while a finger is dragging the sheet we position it directly, no easing */
 .overlay.open .sheet.dragging{transition:none;}
 .overlay.open .sheet{transform:translateY(0);}
@@ -333,11 +337,64 @@ body[data-theme="day"] .balance-row .label{color:#3A2A1E;}
 .nav-btn.active{color:var(--accent);}
 .nav-btn:active{transform:scale(0.92);}
 
-/* ---- Accounts tab placeholder ---- */
-.accounts-empty{margin:40px 20px;text-align:center;color:var(--text-dim);}
-.accounts-empty-icon{font-size:40px;margin-bottom:14px;}
-.accounts-empty h3{margin:0 0 8px;color:var(--text);font-size:17px;font-weight:700;}
-.accounts-empty p{margin:0;font-size:13.5px;line-height:1.6;}
+/* ---- Subscriptions tab ---- */
+.subs-head{display:flex;align-items:center;gap:6px;padding:16px 14px 4px;}
+.subs-title-btn{flex:1;min-width:0;display:flex;align-items:center;justify-content:center;gap:6px;background:none;border:none;color:var(--text);font-size:18px;font-weight:800;letter-spacing:-0.3px;padding:8px 4px;border-radius:var(--radius-sm);}
+.subs-title-btn:active{background:var(--surface-2);}
+.subs-title-btn span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.subs-title-btn svg{width:18px;height:18px;flex-shrink:0;color:var(--text-dim);}
+#subFilterBtn{position:relative;}
+#subFilterBtn.has-filter{color:var(--accent);}
+#subFilterBtn.has-filter::after{content:"";position:absolute;top:6px;right:6px;width:7px;height:7px;border-radius:50%;background:var(--accent);}
+.subs-summary{margin:8px 20px 18px;padding:18px 20px;border-radius:var(--radius-lg);background:var(--hero-grad);color:var(--hero-text);}
+.subs-summary .ss-label{font-size:12.5px;color:var(--hero-sub);font-weight:600;}
+.subs-summary .ss-amount{font-size:30px;font-weight:800;letter-spacing:-0.6px;font-variant-numeric:tabular-nums;margin-top:2px;}
+.subs-summary .ss-amount span{font-size:14px;font-weight:700;color:var(--hero-sub);letter-spacing:0;}
+.subs-summary .ss-sub{font-size:12.5px;color:var(--hero-sub);margin-top:4px;line-height:1.5;}
+.sub-list{padding:0 20px;}
+.sub-card{width:100%;display:flex;align-items:center;gap:14px;padding:18px;margin-bottom:12px;border:none;border-radius:var(--radius-lg);color:#FFFFFF;text-align:left;box-shadow:0 4px 14px rgba(0,0,0,.16);transition:transform .15s ease,opacity .2s ease;}
+.sub-card:active{transform:scale(0.98);}
+.sub-card.dark-text{color:#241C14;}
+.sub-card.paused{opacity:.55;filter:saturate(.35);}
+.sub-initial{width:44px;height:44px;border-radius:50%;background:rgba(255,255,255,.22);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:18px;flex-shrink:0;}
+.sub-card.dark-text .sub-initial{background:rgba(0,0,0,.12);}
+.sub-main{flex:1;min-width:0;display:flex;flex-direction:column;}
+.sub-name{font-size:17px;font-weight:800;letter-spacing:-0.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sub-meta{font-size:12px;font-weight:600;opacity:.82;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.sub-right{flex-shrink:0;display:flex;flex-direction:column;align-items:flex-end;}
+.sub-amt{font-size:18px;font-weight:800;font-variant-numeric:tabular-nums;}
+.sub-due{font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;opacity:.85;margin-top:3px;}
+.subs-empty{margin:10px 20px;padding:30px 22px;text-align:center;border:1px dashed var(--border);border-radius:var(--radius-lg);color:var(--text-dim);}
+.subs-empty .se-icon{font-size:30px;color:var(--accent);margin-bottom:8px;}
+.subs-empty b{display:block;color:var(--text);font-size:16px;margin-bottom:6px;}
+.subs-empty p{margin:0 0 18px;font-size:13px;line-height:1.6;}
+
+/* Sort / filter option rows */
+.opt-row{width:100%;display:flex;align-items:center;gap:14px;background:none;border:none;border-bottom:1px solid var(--border);color:var(--text);padding:13px 2px;font-size:15px;font-weight:600;text-align:left;}
+.opt-row:active{background:var(--surface-2);}
+.opt-mark{width:20px;height:20px;border-radius:50%;border:2px solid var(--text-faint);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--accent-ink);transition:background-color .15s ease,border-color .15s ease;}
+.opt-row.check .opt-mark{border-radius:6px;}
+.opt-row.on .opt-mark{border-color:var(--accent);background:var(--accent);}
+.opt-row.radio.on .opt-mark::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent-ink);}
+.opt-label{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.opt-val{font-size:13px;color:var(--text-dim);font-variant-numeric:tabular-nums;flex-shrink:0;}
+.opt-section{font-size:11.5px;font-weight:700;color:var(--text-faint);text-transform:uppercase;letter-spacing:.6px;margin:18px 0 2px;}
+.opt-section:first-child{margin-top:0;}
+
+/* Subscription sheet bits */
+.field-hint{font-size:11.5px;color:var(--text-faint);margin:-8px 0 16px;line-height:1.45;}
+.swatches{display:flex;flex-wrap:wrap;gap:12px;}
+.swatch{width:32px;height:32px;border-radius:50%;border:none;padding:0;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);}
+.swatch.on{outline:2px solid var(--text);outline-offset:3px;}
+.switch-row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px;background:var(--surface-2);border:1px solid var(--border);border-radius:var(--radius-sm);margin-bottom:12px;}
+.switch-row .sw-txt{min-width:0;}
+.switch-row .sw-txt b{display:block;font-size:14px;color:var(--text);}
+.switch-row .sw-txt span{display:block;font-size:11.5px;color:var(--text-faint);line-height:1.4;margin-top:2px;}
+.switch{position:relative;width:46px;height:26px;border-radius:99px;background:var(--border);border:none;padding:0;flex-shrink:0;}
+.switch::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:#FFFFFF;box-shadow:0 1px 3px rgba(0,0,0,.3);transition:transform .2s ease;}
+.switch.on{background:var(--sage);}
+.switch.on::after{transform:translateX(20px);}
+.tx-tag{display:inline-block;font-size:10px;font-weight:700;letter-spacing:.3px;text-transform:uppercase;color:var(--accent);background:rgba(231,146,79,.14);border-radius:99px;padding:1px 7px;margin-left:6px;vertical-align:1px;}
 
 /* ---- More tab: give the whole tab real side margins (menu + every sub-panel) ---- */
 #tabMore{padding-left:20px;padding-right:20px;}
