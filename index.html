@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="styles.css?v=1.8.1">
+<link rel="stylesheet" href="styles.css?v=1.9.0">
 </head>
 <body>
 
@@ -231,6 +231,10 @@
     </button>
   </div>
   <div class="subs-summary" id="subSummary" style="display:none;"></div>
+  <div class="push-cta" id="pushCta" style="display:none;">
+    <div class="push-cta-txt"><b>🔔 Get reminders on your phone</b><span id="pushCtaSub">A notification at 9 pm before each payment.</span></div>
+    <div class="push-cta-actions"><button type="button" class="push-cta-later" id="pushCtaLater">Not now</button><button type="button" class="push-cta-on" id="pushCtaOn">Turn on</button></div>
+  </div>
   <div class="sub-list" id="subList"></div>
   <button class="fab" id="subFab" aria-label="Add subscription">+</button>
 </div>
@@ -363,6 +367,7 @@
     <div id="settingsMenu">
       <button class="settings-item" data-panel="panelCategories"><span>Categories</span><span class="chev">›</span></button>
       <button class="settings-item" data-panel="panelBudgets"><span>Budgets &amp; caps</span><span class="chev">›</span></button>
+      <button class="settings-item" data-panel="panelNotifications"><span>Notifications</span><span class="chev">›</span></button>
       <button class="settings-item" data-panel="panelPrefs"><span>Preferences</span><span class="chev">›</span></button>
       <button class="settings-item" data-panel="panelAccount"><span>Account &amp; security</span><span class="chev">›</span></button>
       <button class="settings-item" data-panel="panelData"><span>Data</span><span class="chev">›</span></button>
@@ -470,6 +475,20 @@
       </div>
     </div>
 
+    <!-- PANEL: Notifications (push on this device) -->
+    <div class="settings-panel" id="panelNotifications" style="display:none;">
+      <div class="push-intro">
+        <div class="push-intro-icon">🔔</div>
+        <div><b>Subscription reminders</b><p>A notification on your phone at 9 pm before a subscription payment. How many days before is set on each subscription.</p></div>
+      </div>
+      <div class="switch-row">
+        <div class="sw-txt"><b>Notifications on this device</b><span id="pushStatus">Checking…</span></div>
+        <button type="button" class="switch" id="pushSwitch" aria-label="Notifications on this device" aria-pressed="false"></button>
+      </div>
+      <button class="btn-secondary" id="pushTestBtn" style="width:100%;display:none;">Send a test notification</button>
+      <p class="push-msg" id="pushMsg"></p>
+    </div>
+
     <!-- PANEL: The story & my mission -->
     <div class="settings-panel" id="panelStory" style="display:none;">
       <div class="story-body">
@@ -548,6 +567,6 @@
 
 <div id="printArea"></div>
 
-<script src="app.js?v=1.8.1"></script>
+<script src="app.js?v=1.9.0"></script>
 </body>
 </html>

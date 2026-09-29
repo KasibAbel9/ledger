@@ -6,9 +6,10 @@ var SUPABASE_KEY = "sb_publishable_3Bn5vHh4AXyTu2tehjyShg_ef6kwtH2";
 var GUEST_FN_URL = SUPABASE_URL + "/functions/v1/guest-signup";
 var GUEST_EMAIL_DOMAIN = "@guest.ledger.local";
 
-var APP_VERSION = "1.8.1";
+var APP_VERSION = "1.9.0";
 // Newest first. `v` is the version an item shipped in.
 var CHANGELOG = [
+  { v:"1.9.0", title:"Reminders on your phone", body:"Ledger can now send a real notification at 9 pm before a subscription payment, even when the app is closed. Turn it on under More \u2192 Notifications (or from the Subscriptions tab) and send yourself a test. How many days before is set on each subscription." },
   { v:"1.8.1", title:"Expenses and subscriptions are linked", body:"Add entry has a new Repeat option (Monthly, Quarterly, Yearly). Pick the Subscriptions category and it switches to Monthly on its own: saving logs today\u2019s payment and adds the subscription. The other way round, adding a subscription can also add the payment you\u2019ve already made this cycle, so it shows up in your expenses straight away." },
   { v:"1.8.0", title:"Subscriptions", body:"The Accounts tab is now Subscriptions. Add Netflix, your gym, rent — anything that repeats monthly, quarterly or yearly. On the payment date Ledger adds it to your expenses automatically, and the bell reminds you a few days before (you choose how many). Sort by date or price, filter by category or payment method, and pause anything you're not using." },
   { v:"1.8.0", title:"Budgets page fixed", body:"The Budgets & caps page no longer runs off the left edge of the screen on phones." },
@@ -34,6 +35,7 @@ var FEATURES = [
   { name:"Track expenses & income", desc:"Log entries by category and see monthly totals." },
   { name:"Monthly budget", desc:"Set a budget and watch ‘Left this month’ update." },
   { name:"Subscriptions", desc:"Recurring payments logged automatically on their date, with reminders before each charge." },
+  { name:"Phone notifications", desc:"A 9 pm reminder before each subscription payment, even with the app closed." },
   { name:"Category caps", desc:"Optional per-category spending limits." },
   { name:"Quick / Guest login", desc:"Username + PIN, no email needed." },
   { name:"Multi-currency", desc:"EUR, USD, INR, AED." },
@@ -524,6 +526,8 @@ function showApp(mode){
   if(needsSave) doSave();
   render();
   renderWhatsNewCard();
+  refreshPushOnOpen();
+  handleOpenTabParam();
   // Full-width welcome banner for first-time users
   if(mode==="new") showWelcomeBanner("Welcome, "+first+"! 🎉","Log your first expense with the + button to get started.");
   else if(mode==="verified") showWelcomeBanner("Email verified — welcome, "+first+"!","Your account is confirmed and your data is syncing.");
@@ -752,7 +756,7 @@ function freshState(){ return {transactions:[],categories:DEFAULT_CATEGORIES.sli
 document.getElementById("signOutBtn").addEventListener("click",function(){
   showConfirm("Sign out?","You'll need to sign in again on this device.",function(){
     if(saveTimer){ clearTimeout(saveTimer); saveTimer=null; } // cancel any pending save
-    if(currentUser) signOut(currentUser.token).catch(function(){});
+    if(currentUser){ pushSignOut(currentUser.token); signOut(currentUser.token).catch(function(){}); }
     saveSession(null);
     currentUser=null;
     dataLoaded=false; // block saves until a real load happens again
@@ -1555,6 +1559,7 @@ function renderSubs(){
   document.getElementById("subTitleText").textContent=titles[subView.status]||titles.active;
   document.getElementById("subFilterBtn").classList.toggle("has-filter", subView.cats.length>0 || subView.methods.length>0);
 
+  renderPushCta();
   if(!subs.length){
     listEl.innerHTML='<div class="subs-empty"><div class="se-icon">↻</div><b>No subscriptions yet</b>'+
       '<p>Add anything that repeats — Netflix, the gym, rent, your phone plan. Ledger adds it to your expenses on the payment date and reminds you before.</p>'+
@@ -1849,10 +1854,223 @@ document.getElementById("subFilterReset").addEventListener("click",function(){
 });
 document.getElementById("subFilterOverlay").addEventListener("click",function(e){ if(e.target===this) closeOverlayLayer("subFilterOverlay","subFilter"); });
 
+// ---- Push notifications ----
+// A real phone notification at 21:00 local time before a subscription payment.
+// The sending happens on the server: Supabase Edge Function "push" + a scheduler
+// (supabase/push-setup.sql). This part only registers the device with it.
+var PUSH_FN_URL = SUPABASE_URL + "/functions/v1/push";
+var pushBusy = false, pushRefreshedThisSession = false;
+
+function deviceTimeZone(){ try{ return Intl.DateTimeFormat().resolvedOptions().timeZone || "Europe/Berlin"; }catch(e){ return "Europe/Berlin"; } }
+function pushSupport(){
+  if(isIOS() && !isStandalone()) return "ios-install"; // iPhone: only installed web apps get push
+  if(!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) return "unsupported";
+  if(Notification.permission==="denied") return "denied";
+  return "ok";
+}
+function pushSupportText(sup){
+  if(sup==="ios-install") return "On iPhone, add Ledger to your Home Screen first (Share → Add to Home Screen), then open it from there.";
+  if(sup==="denied") return "Notifications are blocked for Ledger. Allow them in your phone's settings, then come back here.";
+  if(sup==="unsupported") return "This browser can't receive notifications. Try Chrome, or the installed app.";
+  return "";
+}
+function pushError(msg){ var e=new Error(msg); e.userMessage=msg; return e; }
+function b64uToBytes(s){
+  var pad="=".repeat((4-s.length%4)%4), bin=atob((s+pad).replace(/-/g,"+").replace(/_/g,"/"));
+  var out=new Uint8Array(bin.length); for(var i=0;i<bin.length;i++) out[i]=bin.charCodeAt(i); return out;
+}
+function bytesToB64u(buf){
+  var bytes=new Uint8Array(buf), s=""; for(var i=0;i<bytes.length;i++) s+=String.fromCharCode(bytes[i]);
+  return btoa(s).replace(/\+/g,"-").replace(/\//g,"_").replace(/=+$/,"");
+}
+function swRegistration(){
+  if(!("serviceWorker" in navigator)) return Promise.resolve(null);
+  return navigator.serviceWorker.register("sw.js").then(function(){ return navigator.serviceWorker.ready; });
+}
+function currentPushSubscription(){
+  if(!("serviceWorker" in navigator) || !("PushManager" in window)) return Promise.resolve(null);
+  return navigator.serviceWorker.getRegistration()
+    .then(function(reg){ return reg ? reg.pushManager.getSubscription() : null; })
+    .catch(function(){ return null; });
+}
+// Talk to the push function as the signed-in user (refreshes an expired token once)
+function pushCall(body, retried){
+  if(!currentUser) return Promise.reject(pushError("Please sign in again."));
+  return fetch(PUSH_FN_URL,{ method:"POST",
+    headers:{ "Content-Type":"application/json", "apikey":SUPABASE_KEY, "Authorization":"Bearer "+currentUser.token },
+    body:JSON.stringify(body) })
+    .catch(function(){ throw pushError("Couldn't reach the server. Check your connection and try again."); })
+    .then(function(r){ return r.json().catch(function(){ return {}; }).then(function(j){ return { status:r.status, body:j||{} }; }); })
+    .then(function(res){
+      var ownAuthError = res.status===401 && res.body.error==="Please sign in again.";
+      if(ownAuthError && !retried && currentUser && currentUser.refresh_token){
+        return refreshToken(currentUser.refresh_token).then(function(d){
+          if(!d || !d.access_token) throw pushError("Your session expired. Please sign in again.");
+          currentUser.token=d.access_token; currentUser.refresh_token=d.refresh_token; saveSession(d);
+          return pushCall(body,true);
+        });
+      }
+      if(ownAuthError) throw pushError("Your session expired. Please sign in again.");
+      if(res.status===404) throw pushError("Notifications aren't set up on the server yet (the “push” function wasn't found).");
+      if(res.status===401) throw pushError("The server turned the request away. In Supabase, switch off “Verify JWT with legacy secret” for the push function.");
+      if(res.status>=400) throw pushError(res.body.error || ("Server error "+res.status+"."));
+      return res.body;
+    });
+}
+function enablePush(){
+  var sup=pushSupport();
+  if(sup!=="ok") return Promise.reject(pushError(pushSupportText(sup)));
+  var reg;
+  return Promise.resolve(Notification.requestPermission()).then(function(perm){ // must run straight from the tap
+    if(perm!=="granted") throw pushError(perm==="denied" ? pushSupportText("denied") : "Notifications weren't allowed. Tap Turn on again and choose Allow.");
+    return swRegistration();
+  }).then(function(r){
+    reg=r;
+    if(!reg) throw pushError(pushSupportText("unsupported"));
+    return pushCall({ action:"config" });
+  }).then(function(cfg){
+    if(!cfg || !cfg.publicKey) throw pushError("The server didn't send a push key.");
+    return reg.pushManager.getSubscription().then(function(existing){
+      // A subscription made with an older server key can't receive anything: replace it
+      var oldKey=existing && existing.options && existing.options.applicationServerKey;
+      if(oldKey && bytesToB64u(oldKey)!==cfg.publicKey) return existing.unsubscribe().then(function(){ return null; });
+      return existing;
+    }).then(function(existing){
+      return existing || reg.pushManager.subscribe({ userVisibleOnly:true, applicationServerKey:b64uToBytes(cfg.publicKey) });
+    });
+  }).then(function(sub){
+    return pushCall({ action:"subscribe", subscription:sub.toJSON(), tz:deviceTimeZone() });
+  }).then(function(){
+    try{ localStorage.setItem("ledger_push_on","1"); }catch(e){}
+    return true;
+  });
+}
+function disablePush(){
+  try{ localStorage.removeItem("ledger_push_on"); }catch(e){}
+  return currentPushSubscription().then(function(sub){
+    if(!sub) return;
+    return pushCall({ action:"unsubscribe", endpoint:sub.endpoint }).catch(function(){}).then(function(){ return sub.unsubscribe(); });
+  });
+}
+// Signing out: this device stops getting the old account's reminders
+function pushSignOut(token){
+  pushRefreshedThisSession=false;
+  try{ localStorage.removeItem("ledger_push_on"); }catch(e){}
+  currentPushSubscription().then(function(sub){
+    if(!sub) return;
+    fetch(PUSH_FN_URL,{ method:"POST", keepalive:true,
+      headers:{ "Content-Type":"application/json", "apikey":SUPABASE_KEY, "Authorization":"Bearer "+token },
+      body:JSON.stringify({ action:"unsubscribe", endpoint:sub.endpoint }) }).catch(function(){});
+    return sub.unsubscribe();
+  }).catch(function(){});
+}
+// Every app open: re-register this device (the browser can rotate it) and record the current timezone
+function refreshPushOnOpen(){
+  if(pushRefreshedThisSession) return;
+  pushRefreshedThisSession=true;
+  if(pushSupport()!=="ok" || Notification.permission!=="granted") return;
+  currentPushSubscription().then(function(sub){
+    var wanted=false; try{ wanted=localStorage.getItem("ledger_push_on")==="1"; }catch(e){}
+    if(sub) return pushCall({ action:"subscribe", subscription:sub.toJSON(), tz:deviceTimeZone() });
+    if(wanted) return enablePush();
+  }).catch(function(e){ console.warn("Push refresh failed", e); }).then(renderPushCta);
+}
+
+// Notifications panel under More
+function setSwitchState(sw,on){ sw.classList.toggle("on",!!on); sw.setAttribute("aria-pressed",on?"true":"false"); }
+function renderPushPanel(msg,cls){
+  var sw=document.getElementById("pushSwitch"), st=document.getElementById("pushStatus"), test=document.getElementById("pushTestBtn"), m=document.getElementById("pushMsg");
+  if(msg!==undefined){ m.textContent=msg; m.className="push-msg"+(cls?" "+cls:""); }
+  var sup=pushSupport();
+  if(sup!=="ok"){ sw.disabled=true; setSwitchState(sw,false); st.textContent=pushSupportText(sup); test.style.display="none"; return; }
+  sw.disabled=pushBusy;
+  currentPushSubscription().then(function(sub){
+    var on=!!sub && Notification.permission==="granted";
+    setSwitchState(sw,on);
+    st.textContent=on ? "On — reminders arrive at 9 pm" : "Off";
+    test.style.display=on && !pushBusy ? "block" : "none";
+  });
+}
+document.getElementById("pushSwitch").addEventListener("click",function(){
+  if(pushBusy) return;
+  var turningOn=!this.classList.contains("on");
+  pushBusy=true;
+  renderPushPanel(turningOn?"Turning on…":"Turning off…","");
+  (turningOn?enablePush():disablePush()).then(function(){
+    pushBusy=false;
+    renderPushPanel(turningOn?"Done. Send yourself a test to check it works.":"Turned off for this device.", turningOn?"good":"");
+    renderPushCta();
+  }).catch(function(e){
+    pushBusy=false;
+    renderPushPanel(e.userMessage||"Something went wrong. Try again.","bad");
+    renderPushCta();
+  });
+});
+document.getElementById("pushTestBtn").addEventListener("click",function(){
+  var btn=this; btn.disabled=true;
+  renderPushPanel("Sending…","");
+  pushCall({ action:"test" }).then(function(res){
+    btn.disabled=false;
+    if(res && res.sent>0) renderPushPanel("Sent. It should appear in a few seconds.","good");
+    else renderPushPanel("The server couldn't reach this device. Turn notifications off and on again.","bad");
+  }).catch(function(e){ btn.disabled=false; renderPushPanel(e.userMessage||"Something went wrong. Try again.","bad"); });
+});
+
+// One-tap prompt on the Subscriptions tab (while there's something to be reminded about)
+function renderPushCta(){
+  var el=document.getElementById("pushCta");
+  if(!el) return;
+  var hasReminders=(state.subscriptions||[]).some(function(s){ return s.active && Number(s.remindDays)>0; });
+  var snoozed=false; try{ snoozed=Number(localStorage.getItem("ledger_push_cta_later")||0)>Date.now(); }catch(e){}
+  var sup=pushSupport();
+  if(!currentUser || !hasReminders || snoozed || sup==="unsupported" || sup==="denied"){ el.style.display="none"; return; }
+  var onBtn=document.getElementById("pushCtaOn");
+  if(sup==="ios-install"){
+    document.getElementById("pushCtaSub").textContent=pushSupportText(sup);
+    onBtn.style.display="none"; el.style.display="flex"; return;
+  }
+  onBtn.style.display="";
+  currentPushSubscription().then(function(sub){
+    el.style.display=(sub && Notification.permission==="granted") ? "none" : "flex";
+  });
+}
+document.getElementById("pushCtaOn").addEventListener("click",function(){
+  var btn=this, txt=document.getElementById("pushCtaSub");
+  btn.disabled=true; btn.textContent="…";
+  enablePush().then(function(){
+    txt.textContent="Done ✓ Reminders will arrive at 9 pm.";
+    btn.style.display="none";
+    setTimeout(function(){ btn.disabled=false; btn.textContent="Turn on"; txt.textContent="A notification at 9 pm before each payment."; renderPushCta(); },2200);
+  }).catch(function(e){
+    btn.disabled=false; btn.textContent="Turn on";
+    txt.textContent=e.userMessage||"Something went wrong. Try again.";
+  });
+});
+document.getElementById("pushCtaLater").addEventListener("click",function(){
+  try{ localStorage.setItem("ledger_push_cta_later",String(Date.now()+14*86400000)); }catch(e){}
+  renderPushCta();
+});
+
+// Tapping a notification opens the Subscriptions tab
+function handleOpenTabParam(){
+  try{
+    if(new URLSearchParams(window.location.search).get("tab")==="subs"){
+      history.replaceState(null,"",window.location.pathname);
+      goToTab("subs");
+    }
+  }catch(e){}
+}
+if("serviceWorker" in navigator){
+  navigator.serviceWorker.register("sw.js").catch(function(){});
+  navigator.serviceWorker.addEventListener("message",function(e){
+    if(e.data && e.data.type==="open-tab" && currentUser && dataLoaded) goToTab("subs");
+  });
+}
+
 // ---- Settings ----
 // settingsOverlay no longer exists — Settings now lives inline in the More tab.
-var SETTINGS_PANELS = ["panelCategories","panelBudgets","panelPrefs","panelAccount","panelData","panelAbout","panelStory"];
-var PANEL_TITLES = { panelCategories:"Categories", panelBudgets:"Budgets & caps", panelPrefs:"Preferences", panelAccount:"Account & security", panelData:"Data", panelAbout:"About & what's new", panelStory:"The story & my mission" };
+var SETTINGS_PANELS = ["panelCategories","panelBudgets","panelNotifications","panelPrefs","panelAccount","panelData","panelAbout","panelStory"];
+var PANEL_TITLES = { panelCategories:"Categories", panelBudgets:"Budgets & caps", panelNotifications:"Notifications", panelPrefs:"Preferences", panelAccount:"Account & security", panelData:"Data", panelAbout:"About & what's new", panelStory:"The story & my mission" };
 function showSettingsMenu(){
   var menu=document.getElementById("settingsMenu");
   menu.style.display="block";
@@ -1893,6 +2111,7 @@ function openSettingsPanel(id){
   }
   if(id==="panelAccount"){ renderAccountInfo(); }
   if(id==="panelAbout"){ renderAbout(); }
+  if(id==="panelNotifications"){ renderPushPanel(""); }
   openLayer("settingsPanel",showSettingsMenu);
 }
 document.getElementById("settingsBtn").addEventListener("click",function(){ goToTab("more"); });
