@@ -12,22 +12,24 @@ self.addEventListener("push", (event) => {
   event.waitUntil(self.registration.showNotification(data.title || "Ledger", {
     body: data.body || "",
     icon: "icon-192.png",
+    badge: "badge-96.png", // small one-colour icon in the status bar (replaces Android's default bell)
     tag: data.tag || "ledger",
     renotify: true,
     data: { url: data.url || "./" },
   }));
 });
 
-// Tapping the notification: focus Ledger if it's open (and jump to Subscriptions), else open it.
+// Tapping the notification: focus Ledger if it's open (and jump to the right tab), else open it.
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const target = new URL((event.notification.data && event.notification.data.url) || "./", self.registration.scope).href;
+  const tab = new URL(target).searchParams.get("tab") || "home";
   event.waitUntil((async () => {
     const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     for (const w of windows) {
       if (w.url.startsWith(self.registration.scope)) {
         await w.focus();
-        w.postMessage({ type: "open-tab", tab: "subs" });
+        w.postMessage({ type: "open-tab", tab });
         return;
       }
     }

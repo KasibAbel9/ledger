@@ -17,7 +17,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap">
-<link rel="stylesheet" href="styles.css?v=1.9.0">
+<link rel="stylesheet" href="styles.css?v=1.9.1">
 </head>
 <body>
 
@@ -479,11 +479,15 @@
     <div class="settings-panel" id="panelNotifications" style="display:none;">
       <div class="push-intro">
         <div class="push-intro-icon">🔔</div>
-        <div><b>Subscription reminders</b><p>A notification on your phone at 9 pm before a subscription payment. How many days before is set on each subscription.</p></div>
+        <div><b>Reminders on your phone</b><p>At 9 pm before a subscription payment (how many days before is set on each subscription), and at 8:30 pm if you haven't logged anything that day.</p></div>
       </div>
       <div class="switch-row">
         <div class="sw-txt"><b>Notifications on this device</b><span id="pushStatus">Checking…</span></div>
         <button type="button" class="switch" id="pushSwitch" aria-label="Notifications on this device" aria-pressed="false"></button>
+      </div>
+      <div class="switch-row" id="dailyRow" style="display:none;">
+        <div class="sw-txt"><b>Daily reminder at 8:30 pm</b><span>Only on days you haven't logged anything or marked as no-spend.</span></div>
+        <button type="button" class="switch on" id="dailySwitch" aria-label="Daily reminder at 8:30 pm" aria-pressed="true"></button>
       </div>
       <button class="btn-secondary" id="pushTestBtn" style="width:100%;display:none;">Send a test notification</button>
       <p class="push-msg" id="pushMsg"></p>
@@ -567,6 +571,6 @@
 
 <div id="printArea"></div>
 
-<script src="app.js?v=1.9.0"></script>
+<script src="app.js?v=1.9.1"></script>
 </body>
 </html>

@@ -6,9 +6,10 @@ var SUPABASE_KEY = "sb_publishable_3Bn5vHh4AXyTu2tehjyShg_ef6kwtH2";
 var GUEST_FN_URL = SUPABASE_URL + "/functions/v1/guest-signup";
 var GUEST_EMAIL_DOMAIN = "@guest.ledger.local";
 
-var APP_VERSION = "1.9.0";
+var APP_VERSION = "1.9.1";
 // Newest first. `v` is the version an item shipped in.
 var CHANGELOG = [
+  { v:"1.9.1", title:"Daily reminder & a new notification icon", body:"If you haven\u2019t logged anything by 8:30 pm, Ledger sends a gentle reminder (switch it off under More \u2192 Notifications). Notifications now show a \u20ac symbol in the status bar instead of the generic bell." },
   { v:"1.9.0", title:"Reminders on your phone", body:"Ledger can now send a real notification at 9 pm before a subscription payment, even when the app is closed. Turn it on under More \u2192 Notifications (or from the Subscriptions tab) and send yourself a test. How many days before is set on each subscription." },
   { v:"1.8.1", title:"Expenses and subscriptions are linked", body:"Add entry has a new Repeat option (Monthly, Quarterly, Yearly). Pick the Subscriptions category and it switches to Monthly on its own: saving logs today\u2019s payment and adds the subscription. The other way round, adding a subscription can also add the payment you\u2019ve already made this cycle, so it shows up in your expenses straight away." },
   { v:"1.8.0", title:"Subscriptions", body:"The Accounts tab is now Subscriptions. Add Netflix, your gym, rent — anything that repeats monthly, quarterly or yearly. On the payment date Ledger adds it to your expenses automatically, and the bell reminds you a few days before (you choose how many). Sort by date or price, filter by category or payment method, and pause anything you're not using." },
@@ -69,7 +70,8 @@ var state = {
   currency:"EUR",
   profile:{ first:"", last:"" },
   subscriptions:[],
-  subsCatSeeded:false
+  subsCatSeeded:false,
+  dailyReminder:true
 };
 var viewMonthOffset = 0;
 var nudgeDismissed = false;
@@ -341,6 +343,7 @@ function loadCloudData(token, userId){
         state.profile = (d.profile && typeof d.profile==="object")?{first:d.profile.first||"",last:d.profile.last||""}:{first:"",last:""};
         state.subscriptions = Array.isArray(d.subscriptions)?d.subscriptions:[];
         state.subsCatSeeded = d.subsCatSeeded===true;
+        state.dailyReminder = d.dailyReminder!==false;
         dataLoaded = true;
         return true; // existing data found
       }
@@ -752,7 +755,7 @@ document.getElementById("recoverResetBtn").addEventListener("click", function(){
 });
 
 // ---- Sign out ----
-function freshState(){ return {transactions:[],categories:DEFAULT_CATEGORIES.slice(),incomeCategories:DEFAULT_INCOME_CATEGORIES.slice(),budget:0,categoryBudgets:{},bestStreak:0,noSpendDays:[],alertsSeen:{},currency:"EUR",profile:{first:"",last:""},subscriptions:[],subsCatSeeded:true}; }
+function freshState(){ return {transactions:[],categories:DEFAULT_CATEGORIES.slice(),incomeCategories:DEFAULT_INCOME_CATEGORIES.slice(),budget:0,categoryBudgets:{},bestStreak:0,noSpendDays:[],alertsSeen:{},currency:"EUR",profile:{first:"",last:""},subscriptions:[],subsCatSeeded:true,dailyReminder:true}; }
 document.getElementById("signOutBtn").addEventListener("click",function(){
   showConfirm("Sign out?","You'll need to sign in again on this device.",function(){
     if(saveTimer){ clearTimeout(saveTimer); saveTimer=null; } // cancel any pending save
@@ -1982,13 +1985,15 @@ function renderPushPanel(msg,cls){
   var sw=document.getElementById("pushSwitch"), st=document.getElementById("pushStatus"), test=document.getElementById("pushTestBtn"), m=document.getElementById("pushMsg");
   if(msg!==undefined){ m.textContent=msg; m.className="push-msg"+(cls?" "+cls:""); }
   var sup=pushSupport();
-  if(sup!=="ok"){ sw.disabled=true; setSwitchState(sw,false); st.textContent=pushSupportText(sup); test.style.display="none"; return; }
+  if(sup!=="ok"){ sw.disabled=true; setSwitchState(sw,false); st.textContent=pushSupportText(sup); test.style.display="none"; document.getElementById("dailyRow").style.display="none"; return; }
   sw.disabled=pushBusy;
   currentPushSubscription().then(function(sub){
     var on=!!sub && Notification.permission==="granted";
     setSwitchState(sw,on);
-    st.textContent=on ? "On — reminders arrive at 9 pm" : "Off";
+    st.textContent=on ? "On for this device" : "Off";
     test.style.display=on && !pushBusy ? "block" : "none";
+    document.getElementById("dailyRow").style.display=on ? "flex" : "none";
+    setSwitchState(document.getElementById("dailySwitch"), state.dailyReminder!==false);
   });
 }
 document.getElementById("pushSwitch").addEventListener("click",function(){
@@ -2005,6 +2010,13 @@ document.getElementById("pushSwitch").addEventListener("click",function(){
     renderPushPanel(e.userMessage||"Something went wrong. Try again.","bad");
     renderPushCta();
   });
+});
+// Daily 8:30 pm nudge: stored in the synced data so the server can respect it
+document.getElementById("dailySwitch").addEventListener("click",function(){
+  state.dailyReminder = !(state.dailyReminder!==false);
+  setSwitchState(this, state.dailyReminder);
+  doSave();
+  renderPushPanel(state.dailyReminder ? "Daily reminder on." : "Daily reminder off. Subscription reminders stay on.", "");
 });
 document.getElementById("pushTestBtn").addEventListener("click",function(){
   var btn=this; btn.disabled=true;
@@ -2054,16 +2066,17 @@ document.getElementById("pushCtaLater").addEventListener("click",function(){
 // Tapping a notification opens the Subscriptions tab
 function handleOpenTabParam(){
   try{
-    if(new URLSearchParams(window.location.search).get("tab")==="subs"){
+    var tab=new URLSearchParams(window.location.search).get("tab");
+    if(tab){
       history.replaceState(null,"",window.location.pathname);
-      goToTab("subs");
+      if(TAB_IDS[tab] && tab!=="home") goToTab(tab);
     }
   }catch(e){}
 }
 if("serviceWorker" in navigator){
   navigator.serviceWorker.register("sw.js").catch(function(){});
   navigator.serviceWorker.addEventListener("message",function(e){
-    if(e.data && e.data.type==="open-tab" && currentUser && dataLoaded) goToTab("subs");
+    if(e.data && e.data.type==="open-tab" && currentUser && dataLoaded && TAB_IDS[e.data.tab]) goToTab(e.data.tab);
   });
 }
 
